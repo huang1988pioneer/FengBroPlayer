@@ -1,4 +1,6 @@
-# 多媒體播放器 · AvaloniaUI
+# MusicVideoMediaPlayer
+
+多媒體播放器 · AvaloniaUI
 
 依設計稿實作的跨平台桌面多媒體播放器介面（音樂 + 影片），使用 **AvaloniaUI 12** + **MVVM**（CommunityToolkit.Mvvm）。
 
@@ -52,6 +54,8 @@ MusicVideoMediaPlayer/
 ├── Styles/           # 深色主題 tokens、控制項樣式
 ├── Converters/       # 綁定轉換器
 ├── Helpers/          # 封面色相漸層
+├── Controls/         # 內嵌影片宿主
+├── Services/         # LibVLC 播放與媒體中繼資料
 └── Assets/           # 圖示資源
 ```
 
@@ -61,10 +65,10 @@ MusicVideoMediaPlayer/
 - 主色紫系強調（`#8B6CFF` → `#A78BFA`）
 - FluentTheme Dark + 自訂圓角、間距與 transport 按鈕
 - 中文介面文案對齊設計稿
+- 預設音量 100%
 
 ## 後續可擴充
 
-- 接入真實音訊 / 影片解碼（LibVLCSharp、FFMpeg 等）
 - 本機檔案掃描與媒體庫資料庫
 - 主題切換（淺色 / 自訂強調色）
 - 鍵盤快捷鍵與系統媒體鍵
