@@ -1,0 +1,672 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MusicVideoMediaPlayer.ViewModels"
+        xmlns:models="using:MusicVideoMediaPlayer.Models"
+        xmlns:conv="using:MusicVideoMediaPlayer.Converters"
+        xmlns:ctrl="using:MusicVideoMediaPlayer.Controls"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1440" d:DesignHeight="920"
+        x:Class="MusicVideoMediaPlayer.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="多媒體播放器"
+        Width="1440"
+        Height="920"
+        MinWidth="1100"
+        MinHeight="720"
+        Background="{StaticResource BgDeepBrush}"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="OnWindowKeyDown"
+        DragDrop.AllowDrop="True">
+
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="Button.nav-item.selected">
+            <Setter Property="Background" Value="#2A2550" />
+            <Setter Property="Foreground" Value="#F1F3F9" />
+        </Style>
+    </Window.Styles>
+
+    <Grid ColumnDefinitions="240,*" Background="{StaticResource BgAppBrush}">
+
+        <!-- ===================== SIDEBAR ===================== -->
+        <Border Grid.Column="0"
+                Background="{StaticResource BgSidebarBrush}"
+                BorderBrush="{StaticResource BorderSubtleBrush}"
+                BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <!-- Brand -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="18,18,18,10">
+                    <Border Width="34" Height="34" CornerRadius="10" Background="{StaticResource AccentGradient}">
+                        <TextBlock Text="♪" FontSize="16" FontWeight="Bold"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="多媒體播放器" Classes="title"
+                               VerticalAlignment="Center" FontSize="15.5" />
+                </StackPanel>
+
+                <!-- Nav + playlists -->
+                <ScrollViewer Grid.Row="1" Margin="0,4,0,8">
+                    <StackPanel Margin="10,0">
+
+                        <TextBlock Text="媒體庫" Classes="section-label" />
+
+                        <ItemsControl ItemsSource="{Binding LibraryNav}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:NavItem">
+                                    <Button Classes="nav-item"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectNavCommand}"
+                                            CommandParameter="{Binding Id}"
+                                            Margin="0,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <TextBlock Text="{Binding Icon}" Width="18" FontSize="14"
+                                                       VerticalAlignment="Center" Opacity="0.9" />
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="我的播放清單" Classes="section-label" Margin="12,18,12,6" />
+
+                        <ItemsControl ItemsSource="{Binding Playlists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:PlaylistItem">
+                                    <Button Classes="nav-item" Margin="0,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <TextBlock Text="{Binding Icon}" Width="18" FontSize="13"
+                                                       Foreground="{Binding Accent, Converter={x:Static conv:HexToBrushConverter.Instance}}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Classes="nav-item" Margin="0,6,0,2">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="＋" Width="18" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="新增播放清單" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock Text="設定" Classes="section-label" Margin="12,18,12,6" />
+
+                        <ItemsControl ItemsSource="{Binding SettingsNav}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:NavItem">
+                                    <Button Classes="nav-item"
+                                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectNavCommand}"
+                                            CommandParameter="{Binding Id}"
+                                            Margin="0,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <TextBlock Text="{Binding Icon}" Width="18" FontSize="13"
+                                                       VerticalAlignment="Center" Opacity="0.85" />
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Mini player -->
+                <Border Grid.Row="2"
+                        Background="#12151F"
+                        BorderBrush="{StaticResource BorderSubtleBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="14,12">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <Border Grid.Column="0" Width="42" Height="42" CornerRadius="8"
+                                    Background="{Binding CurrentTrack.CoverHue, Converter={x:Static conv:HueToBrushConverter.Instance}}">
+                                <TextBlock Text="♪" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="White" FontSize="14" Opacity="0.85" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{Binding CurrentTrack.Title}" Classes="title" FontSize="13"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding CurrentTrack.Artist}" Classes="muted" FontSize="11.5"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="transport" Width="30" Height="30"
+                                    Command="{Binding ToggleFavoriteCommand}"
+                                    Foreground="{StaticResource FavoriteBrush}"
+                                    Content="{Binding IsFavorite, Converter={x:Static conv:FavoriteGlyphConverter.Instance}}" />
+                        </Grid>
+
+                        <Slider Classes="progress" Value="{Binding MusicProgress}" Margin="0,-2" />
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                            <Button Classes="transport" Content="⏮" Command="{Binding PlayPreviousCommand}" />
+                            <Button Classes="play-main" Width="38" Height="38" FontSize="13"
+                                    Command="{Binding ToggleMusicPlayCommand}"
+                                    Content="{Binding IsMusicPlaying, Converter={x:Static conv:PlayPauseGlyphConverter.Instance}}" />
+                            <Button Classes="transport" Content="⏭" Command="{Binding PlayNextCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ===================== MAIN ===================== -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,*" RowSpacing="0">
+
+            <!-- Top bar: open files + search + status -->
+            <Border Grid.Row="0" Padding="16,12,16,8" Background="{StaticResource BgAppBrush}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" RowDefinitions="Auto,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="chip" Command="{Binding OpenMediaCommand}" ToolTip.Tip="開啟音樂或影片（Ctrl+O）">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📂" FontSize="12" />
+                                <TextBlock Text="開啟檔案" FontSize="12.5" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="chip" Command="{Binding OpenMusicCommand}" ToolTip.Tip="開啟音樂檔案">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="♪" FontSize="12" />
+                                <TextBlock Text="開啟音樂" FontSize="12.5" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="chip" Command="{Binding OpenVideoCommand}" ToolTip.Tip="開啟影片檔案">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="▶" FontSize="11" />
+                                <TextBlock Text="開啟影片" FontSize="12.5" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            MaxWidth="440"
+                            HorizontalAlignment="Stretch"
+                            Background="#161A26"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusPill}"
+                            Padding="14,0">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="⌕" FontSize="15"
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Classes="search"
+                                     Text="{Binding SearchText}"
+                                     PlaceholderText="搜尋歌曲、歌手、專輯...  或拖放檔案到視窗"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     VerticalAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     MinHeight="36" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="1"
+                               Text="{Binding StatusMessage}"
+                               Classes="muted"
+                               FontSize="11.5"
+                               Margin="2,8,2,0"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </Border>
+
+            <!-- MUSIC SECTION -->
+            <Border Grid.Row="1" Margin="16,0,16,8" Background="{StaticResource BgPanelBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1"
+                    Padding="18">
+                <Grid ColumnDefinitions="*,300" ColumnSpacing="18">
+
+                    <!-- Music player body -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto" RowSpacing="14">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="♪" Foreground="{StaticResource AccentGlowBrush}" FontSize="15"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="音樂播放器" Classes="title" FontSize="15" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="chip" Command="{Binding OpenMusicCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="＋" FontSize="12" />
+                                    <TextBlock Text="加入音樂" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="20">
+                            <!-- Album art -->
+                            <Border Grid.Column="0" Width="168" Height="168" CornerRadius="12"
+                                    BoxShadow="0 10 28 0 #40000000"
+                                    Background="{Binding CurrentTrack.CoverHue, Converter={x:Static conv:HueToBrushConverter.Instance}}">
+                                <Grid>
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
+                                        <TextBlock Text="{Binding CurrentTrack.Artist}"
+                                                   Foreground="White" FontSize="18" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" Opacity="0.95" />
+                                        <TextBlock Text="{Binding CurrentTrack.Title}"
+                                                   Foreground="White" FontSize="13"
+                                                   HorizontalAlignment="Center" Opacity="0.8" />
+                                    </StackPanel>
+                                    <Border Background="#50000000" VerticalAlignment="Bottom" Height="36"
+                                            CornerRadius="0,0,12,12">
+                                        <TextBlock Text="{Binding CurrentTrack.Title}"
+                                                   Foreground="White" FontSize="12" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- Meta + lyrics -->
+                            <StackPanel Grid.Column="1" Spacing="8">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="{Binding CurrentTrack.Title}"
+                                                   FontSize="26" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock Text="{Binding CurrentTrack.Artist}" Classes="subtitle"
+                                                   FontSize="14" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                            <Border Background="{StaticResource BgElevatedBrush}"
+                                                    CornerRadius="4" Padding="8,3">
+                                                <TextBlock Text="{Binding CurrentTrack.Format}" Classes="muted" FontSize="11" />
+                                            </Border>
+                                            <Border Background="{StaticResource BgElevatedBrush}"
+                                                    CornerRadius="4" Padding="8,3">
+                                                <TextBlock Text="{Binding CurrentTrack.Bitrate}" Classes="muted" FontSize="11" />
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                                                VerticalAlignment="Top">
+                                        <Button Classes="transport" Width="34" Height="34"
+                                                Command="{Binding ToggleFavoriteCommand}"
+                                                Foreground="{StaticResource FavoriteBrush}"
+                                                Content="{Binding IsFavorite, Converter={x:Static conv:FavoriteGlyphConverter.Instance}}" />
+                                        <Button Classes="transport" Width="34" Height="34" Content="⋮" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="{Binding CurrentTrack.Lyrics}"
+                                           Classes="subtitle"
+                                           FontSize="13"
+                                           LineHeight="22"
+                                           Margin="0,8,0,0"
+                                           TextWrapping="Wrap"
+                                           Opacity="0.9" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Waveform + transport -->
+                        <StackPanel Grid.Row="2" Spacing="10">
+                            <!-- Waveform -->
+                            <Border Height="42" Background="#121622" CornerRadius="8" Padding="8,6">
+                                <ItemsControl ItemsSource="{Binding WaveformBars}"
+                                              VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="2"
+                                                        HorizontalAlignment="Stretch" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:Double">
+                                            <Border Width="4"
+                                                    Height="{Binding Converter={x:Static conv:WaveHeightConverter.Instance}}"
+                                                    CornerRadius="2"
+                                                    VerticalAlignment="Center"
+                                                    Background="{StaticResource WaveformGradient}"
+                                                    Opacity="0.85" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="{Binding MusicPosition}" Classes="muted"
+                                           VerticalAlignment="Center" FontSize="11.5" />
+                                <Slider Grid.Column="1" Classes="progress" Name="MusicSeekSlider"
+                                        Value="{Binding MusicProgress}"
+                                        PointerPressed="OnMusicSeekStart"
+                                        PointerReleased="OnMusicSeekEnd" />
+                                <TextBlock Grid.Column="2" Text="{Binding MusicDuration}" Classes="muted"
+                                           VerticalAlignment="Center" FontSize="11.5" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto,*">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                            HorizontalAlignment="Center">
+                                    <Button Classes="transport" Content="⇄" ToolTip.Tip="隨機播放" />
+                                    <Button Classes="transport" Content="⏮" Command="{Binding PlayPreviousCommand}" />
+                                    <Button Classes="play-main"
+                                            Command="{Binding ToggleMusicPlayCommand}"
+                                            Content="{Binding IsMusicPlaying, Converter={x:Static conv:PlayPauseGlyphConverter.Instance}}" />
+                                    <Button Classes="transport" Content="⏭" Command="{Binding PlayNextCommand}" />
+                                    <Button Classes="transport" Content="↻" ToolTip.Tip="重複播放" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock Text="🔊" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
+                                    <Slider Width="100" Classes="progress" Value="{Binding Volume}" />
+                                    <Button Classes="transport" Content="☰" ToolTip.Tip="佇列" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Music playlist -->
+                    <Border Grid.Column="1"
+                            Background="{StaticResource BgCardBrush}"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="12"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1">
+                        <Grid RowDefinitions="Auto,*">
+                            <Grid ColumnDefinitions="*,Auto" Margin="4,0,4,10">
+                                <TextBlock Text="播放清單" Classes="title" FontSize="13.5"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="ghost" Content="清除"
+                                        Command="{Binding ClearQueueCommand}" />
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1">
+                                <ItemsControl ItemsSource="{Binding Tracks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:TrackItem">
+                                            <Button Classes="track-row"
+                                                    Classes.playing="{Binding IsPlaying}"
+                                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectTrackCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Margin="0,1">
+                                                <Grid ColumnDefinitions="28,40,*,Auto" ColumnSpacing="8">
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Index}"
+                                                               Classes="muted"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               FontSize="12"
+                                                               IsVisible="{Binding !IsPlaying}" />
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="♬"
+                                                               Foreground="{StaticResource AccentGlowBrush}"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               FontSize="12"
+                                                               IsVisible="{Binding IsPlaying}" />
+                                                    <Border Grid.Column="1" Width="36" Height="36" CornerRadius="6"
+                                                            Background="{Binding CoverHue, Converter={x:Static conv:HueToBrushConverter.Instance}}">
+                                                        <TextBlock Text="♪" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="White" FontSize="12" Opacity="0.85" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="1">
+                                                        <TextBlock Text="{Binding Title}" FontSize="13"
+                                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Artist}" Classes="muted"
+                                                                   FontSize="11.5"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="3" Text="{Binding Duration}"
+                                                               Classes="muted" FontSize="11.5"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- VIDEO SECTION -->
+            <Border Grid.Row="2" Margin="16,0,16,16" Background="{StaticResource BgPanelBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1"
+                    Padding="18">
+                <Grid ColumnDefinitions="*,300" ColumnSpacing="18">
+
+                    <!-- Video player
+                         Layout: video surface and controls are SEPARATE rows.
+                         Native HWND airspace must not cover the seek bar, or scrubbing is impossible. -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="▶" Foreground="{StaticResource AccentGlowBrush}" FontSize="13"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="影片播放器" Classes="title" FontSize="15" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="chip" Command="{Binding OpenVideoCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="＋" FontSize="12" />
+                                    <TextBlock Text="加入影片" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Stage: video surface ONLY (no overlays that need mouse input) -->
+                        <Border Grid.Row="1" CornerRadius="12" ClipToBounds="True" MinHeight="200"
+                                Background="#0A0C12"
+                                PointerPressed="OnVideoStagePressed"
+                                Cursor="Hand">
+                            <Grid>
+                                <ctrl:EmbeddedVideoView x:Name="VideoHost"
+                                                        MediaPlayer="{Binding VideoMediaPlayer}"
+                                                        HorizontalAlignment="Stretch"
+                                                        VerticalAlignment="Stretch" />
+
+                                <!-- Scenic placeholder when no local video (non-interactive) -->
+                                <Border IsVisible="{Binding !HasLocalVideo}" IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="50%,0%" EndPoint="50%,100%">
+                                            <GradientStop Color="#1B3A5C" Offset="0" />
+                                            <GradientStop Color="#2E6A8A" Offset="0.42" />
+                                            <GradientStop Color="#3D7A6A" Offset="0.62" />
+                                            <GradientStop Color="#0E1A24" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border IsVisible="{Binding !HasLocalVideo}"
+                                        IsHitTestVisible="False"
+                                        Width="420" Height="120" CornerRadius="210"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center" Opacity="0.35">
+                                    <Border.Background>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#6EC6E8" Offset="0" />
+                                            <GradientStop Color="#00000000" Offset="1" />
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <Border IsVisible="{Binding !IsVideoPlaying}"
+                                        IsHitTestVisible="False"
+                                        Width="68" Height="68" CornerRadius="34"
+                                        Background="#B3000000"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="▶" FontSize="24" Foreground="White"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="4,0,0,0" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Timeline + transport: OUTSIDE native video host so scrubbing works -->
+                        <Border Grid.Row="2"
+                                Background="{StaticResource BgCardBrush}"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="12,10"
+                                BorderBrush="{StaticResource BorderSubtleBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="8">
+                                <!-- Scrubbable timeline -->
+                                <Grid ColumnDefinitions="52,*,52" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding VideoPosition}"
+                                               Classes="muted" FontSize="12"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               FontFeatures="tnum" />
+                                    <Slider Grid.Column="1"
+                                            Name="VideoSeekSlider"
+                                            Classes="progress seek"
+                                            Minimum="0"
+                                            Maximum="1"
+                                            TickFrequency="0.001"
+                                            IsSnapToTickEnabled="False"
+                                            Value="{Binding VideoProgress, Mode=TwoWay}"
+                                            IsEnabled="{Binding HasLocalVideo}"
+                                            ToolTip.Tip="拖曳或點擊時間軸跳轉"
+                                            PointerPressed="OnVideoSeekStart"
+                                            PointerReleased="OnVideoSeekEnd"
+                                            PointerCaptureLost="OnVideoSeekCaptureLost"
+                                            KeyUp="OnVideoSeekKeyUp" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding VideoDuration}"
+                                               Classes="muted" FontSize="12"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               FontFeatures="tnum" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                                        <Button Classes="transport" Content="⏮" Width="34" Height="34"
+                                                ToolTip.Tip="倒退 10 秒"
+                                                Command="{Binding SeekVideoRelativeCommand}"
+                                                CommandParameter="-10" />
+                                        <Button Classes="play-main" Width="40" Height="40" FontSize="14"
+                                                Command="{Binding ToggleVideoPlayCommand}"
+                                                Content="{Binding IsVideoPlaying, Converter={x:Static conv:PlayPauseGlyphConverter.Instance}}" />
+                                        <Button Classes="transport" Content="⏭" Width="34" Height="34"
+                                                ToolTip.Tip="快轉 10 秒"
+                                                Command="{Binding SeekVideoRelativeCommand}"
+                                                CommandParameter="10" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding StatusMessage}"
+                                               Classes="muted" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0"
+                                               TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding HasLocalVideo}" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="🔊" FontSize="12" Opacity="0.75" VerticalAlignment="Center" />
+                                        <Slider Width="100" Classes="progress"
+                                                Minimum="0" Maximum="1"
+                                                Value="{Binding Volume, Mode=TwoWay}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Video meta -->
+                        <StackPanel Grid.Row="3" Spacing="6">
+                            <TextBlock Text="{Binding CurrentVideo.Title}"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding CurrentVideo.Subtitle}" Classes="muted" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                <Button Classes="chip">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="👍" FontSize="11" />
+                                        <TextBlock Text="{Binding CurrentVideo.Likes}" FontSize="12" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="chip">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="💬" FontSize="11" />
+                                        <TextBlock Text="{Binding CurrentVideo.Comments}" FontSize="12" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="chip" Content="分享" />
+                                <Button Classes="chip" Content="儲存" />
+                                <Button Classes="chip" Content="⋮" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Up next -->
+                    <Border Grid.Column="1"
+                            Background="{StaticResource BgCardBrush}"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="12"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1">
+                        <Grid RowDefinitions="Auto,*">
+                            <Grid ColumnDefinitions="*,Auto" Margin="4,0,4,10" ColumnSpacing="8">
+                                <TextBlock Text="接下來播放" Classes="title" FontSize="13.5"
+                                           VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="自動播放" Classes="muted" FontSize="11.5"
+                                               VerticalAlignment="Center" />
+                                    <ToggleSwitch Classes="autoplay"
+                                                  IsChecked="{Binding AutoPlay}"
+                                                  OnContent="" OffContent="" />
+                                </StackPanel>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1">
+                                <ItemsControl ItemsSource="{Binding UpNextVideos}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:VideoItem">
+                                            <Button Classes="video-row"
+                                                    Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectVideoCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Margin="0,2">
+                                                <Grid ColumnDefinitions="112,*" ColumnSpacing="10">
+                                                    <Border Grid.Column="0" Height="64" CornerRadius="8"
+                                                            ClipToBounds="True"
+                                                            Background="{Binding CoverHue, Converter={x:Static conv:HueToBrushConverter.Instance}}">
+                                                        <Grid>
+                                                            <TextBlock Text="▶" HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="White" Opacity="0.7" />
+                                                            <Border Background="#AA000000"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Bottom"
+                                                                    Margin="0,0,4,4"
+                                                                    CornerRadius="3"
+                                                                    Padding="5,1">
+                                                                <TextBlock Text="{Binding Duration}"
+                                                                           Foreground="White" FontSize="10.5" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Title}"
+                                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                                   FontSize="12.5" FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap"
+                                                                   MaxLines="2"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Channel}" Classes="muted" FontSize="11" />
+                                                        <TextBlock Text="{Binding Views}" Classes="muted" FontSize="11" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

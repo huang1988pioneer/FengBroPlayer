@@ -1,0 +1,41 @@
+## .NET
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Avalonia / IDE
+.vs/
+.idea/
+*.DotSettings.user
+*.swp
+*~
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+## NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+## Publish / debug
+publish/
+*.pdb
+app.publish/
+
+## Local secrets
+*.local.json
+.env
+.env.*
