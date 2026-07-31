@@ -69,6 +69,21 @@ public sealed class MediaEngine : IDisposable
         return Player.Play(_currentMedia);
     }
 
+    /// <summary>Starts a HTTP(S) media source, including services LibVLC can resolve.</summary>
+    public bool PlayUrl(string url, bool requireVideoHost = false)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return false;
+
+        if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
+            return false;
+
+        _currentMedia?.Dispose();
+        _currentMedia = new Media(_libVlc, uri.AbsoluteUri, FromType.FromLocation);
+        return Player.Play(_currentMedia);
+    }
+
     public bool HasVideoHost => Player.Hwnd != IntPtr.Zero;
 
     public void Pause() => Player.Pause();

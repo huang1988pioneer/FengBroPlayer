@@ -163,6 +163,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnNetworkUrlKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || DataContext is not MainViewModel vm)
+            return;
+
+        vm.PlayNetworkUrlCommand.Execute(null);
+        e.Handled = true;
+    }
+
     private void OnVideoStagePressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
@@ -180,6 +189,24 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainViewModel vm)
             vm.EndMusicSeek();
+    }
+
+    private void OnMusicSeekCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.EndMusicSeek();
+    }
+
+    private void OnMusicSeekKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Left or Key.Right or Key.Home or Key.End or Key.Up or Key.Down)
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.BeginMusicSeek();
+                vm.EndMusicSeek();
+            }
+        }
     }
 
     private void OnVideoSeekStart(object? sender, PointerPressedEventArgs e)

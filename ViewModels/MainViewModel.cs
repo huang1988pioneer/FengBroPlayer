@@ -40,6 +40,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public MediaPlayer VideoMediaPlayer => _video.Player;
 
     [ObservableProperty] public partial string SearchText { get; set; } = string.Empty;
+    [ObservableProperty] public partial string NetworkUrl { get; set; } = string.Empty;
     [ObservableProperty] public partial string SelectedNavId { get; set; } = "home";
     [ObservableProperty] public partial string StatusMessage { get; set; } = "就緒 — 可開啟本機音樂或影片檔案";
     [ObservableProperty] public partial TrackItem? CurrentTrack { get; set; }
@@ -82,7 +83,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _video.PlayingChanged += playing =>
         {
             IsVideoPlaying = playing;
-            HasLocalVideo = CurrentVideo?.IsLocalFile == true;
+            HasLocalVideo = CurrentVideo?.IsLocalFile == true || CurrentVideo?.IsNetworkSource == true;
         };
     }
 
@@ -101,7 +102,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnVideoProgressChanged(double value)
     {
-        if (!_isSeekingVideo || CurrentVideo?.IsLocalFile != true)
+        if (!_isSeekingVideo || (CurrentVideo?.IsLocalFile != true && CurrentVideo?.IsNetworkSource != true))
             return;
 
         _video.SeekRatio(value);
@@ -355,6 +356,38 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             SelectVideo(firstNew);
     }
 
+    [RelayCommand]
+    private void PlayNetworkUrl()
+    {
+        var url = NetworkUrl.Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            StatusMessage = "Please enter a valid http:// or https:// media URL.";
+            return;
+        }
+
+        var title = uri.Host.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    uri.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase)
+            ? "YouTube video"
+            : uri.Host;
+        var item = new VideoItem
+        {
+            Title = title,
+            Channel = uri.Host,
+            Duration = "--:--",
+            Views = "Network source",
+            CoverHue = "195",
+            Subtitle = uri.AbsoluteUri,
+            SourceUrl = uri.AbsoluteUri
+        };
+
+        if (!UpNextVideos.Any(v => string.Equals(v.SourceUrl, item.SourceUrl, StringComparison.OrdinalIgnoreCase)))
+            UpNextVideos.Insert(0, item);
+
+        SelectVideo(item);
+    }
+
     private void ReindexTracks()
     {
         for (var i = 0; i < Tracks.Count; i++)
@@ -404,13 +437,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         VideoDuration = video.Duration;
         VideoPosition = "00:00";
         VideoProgress = 0;
-        HasLocalVideo = video.IsLocalFile;
+        HasLocalVideo = video.IsLocalFile || video.IsNetworkSource;
 
         if (video.IsLocalFile && video.FilePath is not null)
         {
             _audio.Pause();
             // Must attach HWND first; otherwise LibVLC opens a separate OS window.
             PlayLocalVideo(video.FilePath, video.Title);
+        }
+        else if (video.IsNetworkSource && video.SourceUrl is not null)
+        {
+            _audio.Pause();
+            PlayNetworkVideo(video.SourceUrl, video.Title);
         }
         else
         {
@@ -454,6 +492,21 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
+    private void PlayNetworkVideo(string url, string title)
+    {
+        PrepareVideoHost?.Invoke();
+        if (_video.PlayUrl(url, requireVideoHost: true))
+        {
+            IsVideoPlaying = true;
+            HasLocalVideo = true;
+            StatusMessage = $"Playing network video: {title}";
+            return;
+        }
+
+        StatusMessage = "Unable to start this network video. Check the URL or LibVLC site support.";
+        IsVideoPlaying = false;
+    }
+
     [RelayCommand]
     private void ToggleMusicPlay()
     {
@@ -486,7 +539,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ToggleVideoPlay()
     {
-        if (CurrentVideo?.IsLocalFile == true)
+        if (CurrentVideo?.IsLocalFile == true || CurrentVideo?.IsNetworkSource == true)
         {
             if (_video.IsPlaying)
             {
@@ -502,6 +555,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             else if (CurrentVideo.FilePath is not null)
             {
                 PlayLocalVideo(CurrentVideo.FilePath, CurrentVideo.Title);
+            }
+            else if (CurrentVideo.SourceUrl is not null)
+            {
+                PlayNetworkVideo(CurrentVideo.SourceUrl, CurrentVideo.Title);
             }
         }
         else
@@ -571,7 +628,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void EndVideoSeek()
     {
         // Commit final scrub position (click-or-drag on timeline).
-        if (_isSeekingVideo && CurrentVideo?.IsLocalFile == true)
+        if (_isSeekingVideo && (CurrentVideo?.IsLocalFile == true || CurrentVideo?.IsNetworkSource == true))
         {
             _video.SeekRatio(VideoProgress);
             UpdateVideoPositionLabel(VideoProgress);
@@ -582,7 +639,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void SeekVideoRelative(object? parameter)
     {
-        if (CurrentVideo?.IsLocalFile != true)
+        if (CurrentVideo?.IsLocalFile != true && CurrentVideo?.IsNetworkSource != true)
             return;
 
         var seconds = 10.0;
@@ -622,9 +679,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         // Don't fight the user while they are scrubbing the timeline.
         if (_isSeekingVideo) return;
+
+        // Network sources (especially YouTube) may expose a fractional position
+        // before LibVLC has discovered their duration.  Using Position here keeps
+        // the timeline responsive instead of leaving it fixed at the beginning.
+        VideoProgress = _video.GetProgressRatio();
         if (lengthMs > 0)
         {
-            VideoProgress = (double)timeMs / lengthMs;
             VideoDuration = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(lengthMs));
         }
         VideoPosition = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(timeMs));

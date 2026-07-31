@@ -211,6 +211,33 @@
                         </Grid>
                     </Border>
 
+                    <Border Grid.Column="2"
+                            Width="380"
+                            HorizontalAlignment="Stretch"
+                            Background="#161A26"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusPill}"
+                            Padding="14,0">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0"
+                                     Name="NetworkUrlTextBox"
+                                     Classes="search"
+                                     Text="{Binding NetworkUrl}"
+                                     PlaceholderText="Paste a video URL, e.g. https://www.youtube.com/watch?v=..."
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     VerticalAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     MinHeight="36"
+                                     KeyDown="OnNetworkUrlKeyDown" />
+                            <Button Grid.Column="1"
+                                    Classes="chip"
+                                    Command="{Binding PlayNetworkUrlCommand}"
+                                    Content="Play URL" />
+                        </Grid>
+                    </Border>
+
                     <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="1"
                                Text="{Binding StatusMessage}"
                                Classes="muted"
@@ -335,9 +362,11 @@
                                 <TextBlock Grid.Column="0" Text="{Binding MusicPosition}" Classes="muted"
                                            VerticalAlignment="Center" FontSize="11.5" />
                                 <Slider Grid.Column="1" Classes="progress" Name="MusicSeekSlider"
-                                        Value="{Binding MusicProgress}"
+                                        Value="{Binding MusicProgress, Mode=TwoWay}"
                                         PointerPressed="OnMusicSeekStart"
-                                        PointerReleased="OnMusicSeekEnd" />
+                                        PointerReleased="OnMusicSeekEnd"
+                                        PointerCaptureLost="OnMusicSeekCaptureLost"
+                                        KeyUp="OnMusicSeekKeyUp" />
                                 <TextBlock Grid.Column="2" Text="{Binding MusicDuration}" Classes="muted"
                                            VerticalAlignment="Center" FontSize="11.5" />
                             </Grid>

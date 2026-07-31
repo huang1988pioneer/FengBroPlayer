@@ -12,5 +12,7 @@ public sealed record VideoItem
     public string? Likes { get; init; }
     public string? Comments { get; init; }
     public string? FilePath { get; init; }
+    public string? SourceUrl { get; init; }
     public bool IsLocalFile => !string.IsNullOrWhiteSpace(FilePath);
+    public bool IsNetworkSource => !string.IsNullOrWhiteSpace(SourceUrl);
 }
