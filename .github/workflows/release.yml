@@ -1,0 +1,83 @@
+name: Build release packages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (for example v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win-x64
+            runner: windows-latest
+            rid: win-x64
+            archive: zip
+          - name: osx-x64
+            runner: macos-13
+            rid: osx-x64
+            archive: tar.gz
+          - name: linux-x64
+            runner: ubuntu-latest
+            rid: linux-x64
+            archive: tar.gz
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish self-contained application
+        shell: pwsh
+        run: >-
+          dotnet publish MusicVideoMediaPlayer.csproj -c Release -r ${{ matrix.rid }}
+          --self-contained true -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false
+          -o publish/${{ matrix.name }}
+      - name: Add Linux runtime instructions
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: |
+          cat > publish/linux-x64/README-Linux.txt <<'EOF'
+          This release needs LibVLC from your Linux distribution.
+          Debian/Ubuntu: sudo apt install vlc libvlc5
+          Fedora: sudo dnf install vlc
+          EOF
+      - name: Archive Windows release
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: Compress-Archive -Path publish/${{ matrix.name }}/* -DestinationPath MusicVideoMediaPlayer-${{ matrix.name }}.zip
+      - name: Archive Unix release
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: tar -C publish/${{ matrix.name }} -czf MusicVideoMediaPlayer-${{ matrix.name }}.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicVideoMediaPlayer-${{ matrix.name }}
+          path: MusicVideoMediaPlayer-${{ matrix.name }}.${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release-assets/* --target "$GITHUB_SHA" --generate-notes

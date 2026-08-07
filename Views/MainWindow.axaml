@@ -1,0 +1,410 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MusicVideoMediaPlayer.ViewModels"
+        xmlns:models="using:MusicVideoMediaPlayer.Models"
+        xmlns:conv="using:MusicVideoMediaPlayer.Converters"
+        xmlns:ctrl="using:MusicVideoMediaPlayer.Controls"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1280" d:DesignHeight="800"
+        x:Class="MusicVideoMediaPlayer.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="{Binding WindowTitle}"
+        Width="1280"
+        Height="800"
+        MinWidth="800"
+        MinHeight="560"
+        Background="{StaticResource BgAppBrush}"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="OnWindowKeyDown"
+        PointerMoved="OnWindowPointerMoved"
+        DragDrop.AllowDrop="True">
+
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="Button.playlist-row.current">
+            <Setter Property="Background" Value="{StaticResource BgSelectedBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+        <!-- ===================== MENU ===================== -->
+        <Menu Grid.Row="0"
+              IsVisible="{Binding IsMenuBarVisible}"
+              Background="{StaticResource BgPanelBrush}">
+            <MenuItem Header="檔案(_F)">
+                <MenuItem Header="開啟檔案…"
+                          Command="{Binding OpenMediaCommand}"
+                          InputGesture="Ctrl+O" />
+                <MenuItem Header="開啟音樂…"
+                          Command="{Binding OpenMusicCommand}" />
+                <MenuItem Header="開啟影片…"
+                          Command="{Binding OpenVideoCommand}" />
+                <MenuItem Header="開啟網路串流…"
+                          Command="{Binding OpenNetworkUrlCommand}" />
+                <Separator />
+                <MenuItem Header="結束"
+                          Command="{Binding ExitCommand}" />
+            </MenuItem>
+            <MenuItem Header="播放(_P)">
+                <MenuItem Header="播放/暫停"
+                          Command="{Binding TogglePlayCommand}"
+                          InputGesture="Space" />
+                <MenuItem Header="停止"
+                          Command="{Binding StopMediaCommand}"
+                          InputGesture="S" />
+                <MenuItem Header="上一首/上一部"
+                          Command="{Binding PlayPreviousCommand}" />
+                <MenuItem Header="下一首/下一部"
+                          Command="{Binding PlayNextCommand}" />
+                <Separator />
+                <MenuItem Header="靜音"
+                          Command="{Binding ToggleMuteCommand}"
+                          InputGesture="M" />
+            </MenuItem>
+            <MenuItem Header="檢視(_V)">
+                <MenuItem Header="播放清單"
+                          Command="{Binding TogglePlaylistCommand}"
+                          InputGesture="P" />
+                <MenuItem Header="全螢幕"
+                          Command="{Binding ToggleFullscreenCommand}"
+                          InputGesture="F" />
+            </MenuItem>
+        </Menu>
+
+        <!-- ===================== STAGE + PLAYLIST ===================== -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+
+            <!-- Stage: VideoHost row OR Audio/Idle row (KD-12 height matrix) -->
+            <Grid x:Name="StageRoot"
+                  Grid.Column="0"
+                  Background="{StaticResource BgStageBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="0" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Video surface ONLY — controls NEVER overlap this HWND -->
+                <Border Grid.Row="0"
+                        Background="#000000"
+                        ClipToBounds="True">
+                    <ctrl:EmbeddedVideoView x:Name="VideoHost"
+                                            MediaPlayer="{Binding VideoMediaPlayer}"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch" />
+                </Border>
+
+                <!-- Audio / idle stage (Avalonia gestures OK) -->
+                <Border Grid.Row="1"
+                        Background="{StaticResource BgStageBrush}"
+                        PointerPressed="OnAudioStagePointerPressed"
+                        PointerWheelChanged="OnAudioStageWheel"
+                        DoubleTapped="OnAudioStageDoubleTapped"
+                        Cursor="Hand">
+                    <Border.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="開啟檔案…" Command="{Binding OpenMediaCommand}" />
+                            <MenuItem Header="播放/暫停" Command="{Binding TogglePlayCommand}" />
+                            <MenuItem Header="停止" Command="{Binding StopMediaCommand}" />
+                            <Separator />
+                            <MenuItem Header="播放清單" Command="{Binding TogglePlaylistCommand}" />
+                            <MenuItem Header="全螢幕" Command="{Binding ToggleFullscreenCommand}" />
+                        </ContextMenu>
+                    </Border.ContextMenu>
+
+                    <Grid>
+                        <!-- Empty / audio cover -->
+                        <StackPanel VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    Spacing="16"
+                                    MaxWidth="480">
+                            <Border Width="180" Height="180"
+                                    CornerRadius="12"
+                                    BoxShadow="0 12 32 0 #40000000"
+                                    IsVisible="{Binding CurrentMedia, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    Background="{Binding CurrentMedia.CoverHue, Converter={x:Static conv:HueToBrushConverter.Instance}}">
+                                <TextBlock Text="♪"
+                                           Foreground="White"
+                                           FontSize="42"
+                                           FontWeight="Bold"
+                                           Opacity="0.85"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Border>
+
+                            <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='多媒體播放器'}"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextAlignment="Center" />
+                            <TextBlock Text="{Binding CurrentMedia.Subtitle, FallbackValue='開啟檔案或拖放媒體到視窗'}"
+                                       FontSize="13"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextAlignment="Center" />
+
+                            <!-- Mini waveform when audio -->
+                            <Border Height="36"
+                                    Margin="0,8,0,0"
+                                    IsVisible="{Binding IsAudioStage}"
+                                    HorizontalAlignment="Center"
+                                    MinWidth="200">
+                                <ItemsControl ItemsSource="{Binding WaveformBars}"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:Double">
+                                            <Border Width="3"
+                                                    Height="{Binding Converter={x:Static conv:WaveHeightConverter.Instance}}"
+                                                    CornerRadius="1"
+                                                    VerticalAlignment="Center"
+                                                    Background="{StaticResource WaveformGradient}"
+                                                    Opacity="0.8" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        HorizontalAlignment="Center"
+                                        Margin="0,8,0,0"
+                                        IsVisible="{Binding CurrentMedia, Converter={x:Static ObjectConverters.IsNull}}">
+                                <Button Classes="chip" Command="{Binding OpenMediaCommand}" Content="開啟檔案" />
+                                <Button Classes="chip" Command="{Binding OpenNetworkUrlCommand}" Content="開啟網路串流" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Playlist dock -->
+            <Border Grid.Column="1"
+                    Width="300"
+                    IsVisible="{Binding IsPlaylistVisible}"
+                    Background="{StaticResource BgPanelBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
+                    BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto,Auto"
+                          Margin="12,10,8,8"
+                          ColumnSpacing="6">
+                        <TextBlock Text="播放清單"
+                                   Classes="title"
+                                   FontSize="13.5"
+                                   VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="6"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="自動播放"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       VerticalAlignment="Center" />
+                            <ToggleSwitch Classes="autoplay"
+                                          IsChecked="{Binding AutoPlay}" />
+                        </StackPanel>
+                        <Button Grid.Column="2"
+                                Classes="ghost"
+                                Content="清除"
+                                Command="{Binding ClearPlaylistCommand}"
+                                ToolTip.Tip="清除全部（含示範列）" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" Margin="4,0,4,8">
+                        <ItemsControl ItemsSource="{Binding Playlist}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:MediaItem">
+                                    <Button Classes="playlist-row"
+                                            Classes.current="{Binding IsCurrent}"
+                                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectMediaCommand}"
+                                            CommandParameter="{Binding}"
+                                            Margin="0,1">
+                                        <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Index}"
+                                                       Classes="muted"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       IsVisible="{Binding !IsCurrent}" />
+                                            <TextBlock Grid.Column="0"
+                                                       Text="▶"
+                                                       Foreground="{StaticResource AccentGlowBrush}"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       IsVisible="{Binding IsCurrent}" />
+                                            <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Subtitle}"
+                                                           Classes="muted"
+                                                           FontSize="11"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Duration}"
+                                                       Classes="muted"
+                                                       FontSize="11.5"
+                                                       VerticalAlignment="Center"
+                                                       FontFeatures="tnum" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===================== TRANSPORT (outside HWND) ===================== -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,Auto">
+            <!-- FS hot-zone -->
+            <Border x:Name="HotZone"
+                    Height="6"
+                    Background="Transparent"
+                    PointerEntered="OnHotZoneEntered" />
+
+            <Border Grid.Row="1"
+                    x:Name="ControlBar"
+                    Classes="control-bar"
+                    IsVisible="{Binding IsControlBarVisible}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                    <!-- Left: stop / prev / play / next / ±10s -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Button Classes="transport"
+                                Content="■"
+                                ToolTip.Tip="停止 (S)"
+                                Command="{Binding StopMediaCommand}" />
+                        <Button Classes="transport"
+                                Content="⏮"
+                                ToolTip.Tip="上一個"
+                                Command="{Binding PlayPreviousCommand}" />
+                        <Button Classes="play-main"
+                                Command="{Binding TogglePlayCommand}"
+                                Content="{Binding IsPlaying, Converter={x:Static conv:PlayPauseGlyphConverter.Instance}}"
+                                ToolTip.Tip="播放/暫停 (Space)" />
+                        <Button Classes="transport"
+                                Content="⏭"
+                                ToolTip.Tip="下一個"
+                                Command="{Binding PlayNextCommand}" />
+                        <Button Classes="transport"
+                                Content="−10"
+                                FontSize="10"
+                                ToolTip.Tip="倒退 10 秒"
+                                Command="{Binding SeekRelativeCommand}"
+                                CommandParameter="-10" />
+                        <Button Classes="transport"
+                                Content="+10"
+                                FontSize="10"
+                                ToolTip.Tip="快轉 10 秒"
+                                Command="{Binding SeekRelativeCommand}"
+                                CommandParameter="10" />
+                    </StackPanel>
+
+                    <!-- Center: seek -->
+                    <Grid Grid.Column="1" ColumnDefinitions="48,*,48" ColumnSpacing="8" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding PositionText}"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   FontFeatures="tnum" />
+                        <Slider Grid.Column="1"
+                                Name="SeekSlider"
+                                Classes="progress seek"
+                                Minimum="0"
+                                Maximum="1"
+                                Value="{Binding Progress, Mode=TwoWay}"
+                                IsEnabled="{Binding HasPlayableMedia}"
+                                ToolTip.Tip="拖曳或點擊時間軸跳轉"
+                                PointerPressed="OnSeekStart"
+                                PointerReleased="OnSeekEnd"
+                                PointerCaptureLost="OnSeekCaptureLost"
+                                KeyUp="OnSeekKeyUp" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding DurationText}"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   FontFeatures="tnum" />
+                    </Grid>
+
+                    <!-- Right: mute / volume / playlist / FS / open -->
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center">
+                        <Button Classes="transport"
+                                ToolTip.Tip="靜音 (M)"
+                                Command="{Binding ToggleMuteCommand}">
+                            <Panel>
+                                <TextBlock Text="🔊" IsVisible="{Binding !IsMuted}" FontSize="13" />
+                                <TextBlock Text="🔇" IsVisible="{Binding IsMuted}" FontSize="13" />
+                            </Panel>
+                        </Button>
+                        <Slider Width="90"
+                                Classes="progress"
+                                Minimum="0"
+                                Maximum="1"
+                                Value="{Binding Volume, Mode=TwoWay}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="音量" />
+                        <Button Classes="transport"
+                                Content="☰"
+                                ToolTip.Tip="播放清單 (P)"
+                                Command="{Binding TogglePlaylistCommand}" />
+                        <Button Classes="transport"
+                                Content="⛶"
+                                ToolTip.Tip="全螢幕 (F)"
+                                Command="{Binding ToggleFullscreenCommand}" />
+                        <Button Classes="transport"
+                                Content="📂"
+                                ToolTip.Tip="開啟檔案 (Ctrl+O)"
+                                Command="{Binding OpenMediaCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===================== STATUS ===================== -->
+        <Border Grid.Row="3"
+                Classes="status-bar"
+                IsVisible="{Binding IsStatusBarVisible}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding StatusMessage}"
+                           Classes="muted"
+                           FontSize="11.5"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusDetail}"
+                           Classes="muted"
+                           FontSize="11.5"
+                           Margin="16,0,0,0"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
