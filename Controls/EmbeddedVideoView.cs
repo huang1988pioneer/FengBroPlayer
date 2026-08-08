@@ -91,8 +91,21 @@ public sealed class EmbeddedVideoView : NativeControlHost
 
     protected override void DestroyNativeControlCore(IPlatformHandle control)
     {
+        // Detach LibVLC from this HWND *before* DestroyWindow. Clearing Hwnd while the
+        // player is still Opening/Playing is a known hard freeze on Windows LibVLC.
         if (MediaPlayer is not null)
         {
+            try
+            {
+                var state = MediaPlayer.State;
+                if (state is VLCState.Playing or VLCState.Buffering or VLCState.Opening or VLCState.Paused)
+                {
+                    try { MediaPlayer.SetPause(true); } catch { /* ignore */ }
+                    try { MediaPlayer.Stop(); } catch { /* ignore */ }
+                }
+            }
+            catch { /* ignore */ }
+
             try { MediaPlayer.Hwnd = IntPtr.Zero; }
             catch { /* ignore */ }
         }
@@ -101,7 +114,8 @@ public sealed class EmbeddedVideoView : NativeControlHost
             && control.Handle != IntPtr.Zero
             && control.HandleDescriptor == "HWND")
         {
-            DestroyWindow(control.Handle);
+            try { DestroyWindow(control.Handle); }
+            catch { /* ignore */ }
         }
         else
         {

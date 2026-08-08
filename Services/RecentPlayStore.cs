@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using MusicVideoMediaPlayer.Models;
 
 namespace MusicVideoMediaPlayer.Services;
@@ -12,6 +14,7 @@ namespace MusicVideoMediaPlayer.Services;
 /// <summary>
 /// Persists recently played media under LocalApplicationData.
 /// Newest entries first; de-duplicated by file path or URL.
+/// Disk writes are debounced so track switching stays smooth.
 /// </summary>
 public sealed class RecentPlayStore
 {
@@ -25,6 +28,8 @@ public sealed class RecentPlayStore
     };
 
     private readonly string _filePath;
+    private readonly object _saveGate = new();
+    private CancellationTokenSource? _saveCts;
     private bool _loaded;
 
     public ObservableCollection<RecentPlayEntry> Items { get; } = [];
@@ -99,6 +104,15 @@ public sealed class RecentPlayStore
             ? "file:" + item.FilePath.Trim()
             : "url:" + item.SourceUrl!.Trim();
 
+        // Already top — only refresh timestamp without reshuffling the list.
+        if (Items.Count > 0 &&
+            string.Equals(Items[0].Key, key, StringComparison.OrdinalIgnoreCase))
+        {
+            Items[0].PlayedAtUtc = DateTime.UtcNow;
+            ScheduleSave();
+            return true;
+        }
+
         for (var i = Items.Count - 1; i >= 0; i--)
         {
             if (string.Equals(Items[i].Key, key, StringComparison.OrdinalIgnoreCase))
@@ -110,7 +124,7 @@ public sealed class RecentPlayStore
         while (Items.Count > MaxEntries)
             Items.RemoveAt(Items.Count - 1);
 
-        Save();
+        ScheduleSave();
         return true;
     }
 
@@ -118,7 +132,7 @@ public sealed class RecentPlayStore
     {
         Load();
         if (Items.Remove(entry))
-            Save();
+            ScheduleSave();
     }
 
     public void Clear()
@@ -126,38 +140,56 @@ public sealed class RecentPlayStore
         Load();
         if (Items.Count == 0) return;
         Items.Clear();
-        Save();
+        ScheduleSave();
     }
 
-    public void Save()
+    /// <summary>Debounced async write — never blocks the UI during SelectMedia.</summary>
+    public void ScheduleSave()
     {
-        try
+        List<RecentEntryDto> snapshot;
+        lock (_saveGate)
         {
-            var dto = new RecentFileDto
+            snapshot = Items.Select(e => new RecentEntryDto
             {
-                Entries = Items.Select(e => new RecentEntryDto
-                {
-                    Title = e.Title,
-                    Subtitle = e.Subtitle,
-                    FilePath = e.FilePath,
-                    SourceUrl = e.SourceUrl,
-                    Kind = e.Kind.ToString(),
-                    Duration = e.Duration,
-                    Format = e.Format,
-                    CoverHue = e.CoverHue,
-                    Bitrate = e.Bitrate,
-                    PlayedAtUtc = e.PlayedAtUtc
-                }).ToList()
-            };
+                Title = e.Title,
+                Subtitle = e.Subtitle,
+                FilePath = e.FilePath,
+                SourceUrl = e.SourceUrl,
+                Kind = e.Kind.ToString(),
+                Duration = e.Duration,
+                Format = e.Format,
+                CoverHue = e.CoverHue,
+                Bitrate = e.Bitrate,
+                PlayedAtUtc = e.PlayedAtUtc
+            }).ToList();
+        }
 
-            var json = JsonSerializer.Serialize(dto, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch
+        _saveCts?.Cancel();
+        _saveCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _saveCts = cts;
+        var path = _filePath;
+        _ = Task.Run(async () =>
         {
-            // Disk full / permissions — ignore; history is best-effort.
-        }
+            try
+            {
+                await Task.Delay(350, cts.Token).ConfigureAwait(false);
+                var dto = new RecentFileDto { Entries = snapshot };
+                var json = JsonSerializer.Serialize(dto, JsonOptions);
+                await File.WriteAllTextAsync(path, json, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Newer save scheduled.
+            }
+            catch
+            {
+                // Disk full / permissions — ignore.
+            }
+        }, cts.Token);
     }
+
+    public void Save() => ScheduleSave();
 
     private sealed class RecentFileDto
     {

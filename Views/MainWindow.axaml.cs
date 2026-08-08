@@ -84,9 +84,9 @@ public partial class MainWindow : Window
     {
         if (sender is not MainViewModel vm) return;
 
-        if (e.PropertyName is nameof(MainViewModel.ActiveMediaKind)
-            or nameof(MainViewModel.IsVideoStage)
-            or nameof(MainViewModel.IsAudioStage))
+        // Only react to ActiveMediaKind — IsVideoStage/IsAudioStage also change and would
+        // re-apply row heights 3× and thrash the HWND host when switching sources.
+        if (e.PropertyName == nameof(MainViewModel.ActiveMediaKind))
         {
             ApplyStageRowHeights(vm.ActiveMediaKind);
             if (vm.ActiveMediaKind == MediaKind.Video)
@@ -104,10 +104,41 @@ public partial class MainWindow : Window
     /// <summary>
     /// KD-12 matrix: Video → host *, audio 0; Audio/None → host 0, audio *.
     /// </summary>
+    private MediaKind? _appliedStageKind;
+
     private void ApplyStageRowHeights(MediaKind kind)
     {
         if (StageRoot.RowDefinitions.Count < 2)
             return;
+
+        // Skip no-op layout when staying in the same stage (audio→audio / video→video).
+        if (_appliedStageKind == kind)
+            return;
+
+        // Leaving video stage: detach before native host is destroyed (ViewModel also prepares).
+        if (_appliedStageKind == MediaKind.Video && kind != MediaKind.Video
+            && DataContext is MainViewModel vmLeave)
+        {
+            try
+            {
+                if (vmLeave.VideoMediaPlayer.Hwnd != IntPtr.Zero)
+                {
+                    var st = vmLeave.VideoMediaPlayer.State;
+                    if (st is LibVLCSharp.Shared.VLCState.Playing
+                        or LibVLCSharp.Shared.VLCState.Buffering
+                        or LibVLCSharp.Shared.VLCState.Opening
+                        or LibVLCSharp.Shared.VLCState.Paused)
+                    {
+                        try { vmLeave.VideoMediaPlayer.SetPause(true); } catch { /* ignore */ }
+                        try { vmLeave.VideoMediaPlayer.Stop(); } catch { /* ignore */ }
+                    }
+                    vmLeave.VideoMediaPlayer.Hwnd = IntPtr.Zero;
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        _appliedStageKind = kind;
 
         if (kind == MediaKind.Video)
         {
@@ -128,6 +159,8 @@ public partial class MainWindow : Window
 
         if (VideoHost.MediaPlayer is null)
             VideoHost.MediaPlayer = vm.VideoMediaPlayer;
+        else
+            VideoHost.EnsureAttached();
 
         VideoHost.EnsureAttached();
     }

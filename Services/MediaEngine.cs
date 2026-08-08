@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using LibVLCSharp.Shared;
 
@@ -11,8 +13,11 @@ namespace MusicVideoMediaPlayer.Services;
 public sealed class MediaEngine : IDisposable
 {
     private readonly LibVLC _libVlc;
+    private readonly object _mediaGate = new();
+    private readonly List<Media> _pendingRelease = [];
     private Media? _currentMedia;
     private bool _disposed;
+    private bool _releaseDrainQueued;
 
     public MediaPlayer Player { get; }
 
@@ -23,9 +28,12 @@ public sealed class MediaEngine : IDisposable
     public MediaEngine()
     {
         InitializeLibVlc();
+        // --aout=directsound / no extra video window flags kept minimal for stability.
         _libVlc = new LibVLC(
             "--no-video-title-show",
-            "--quiet");
+            "--quiet",
+            "--no-snapshot-preview",
+            "--avcodec-hw=any");
         Player = new MediaPlayer(_libVlc);
         Player.EndReached += OnEndReached;
         Player.TimeChanged += OnTimeChanged;
@@ -146,19 +154,23 @@ public sealed class MediaEngine : IDisposable
     /// </param>
     public bool Play(string path, bool requireVideoHost = false)
     {
-        if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return false;
 
         if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
             return false;
 
-        // Swap media without an explicit Stop — faster for playlist skip (mp3/mp4).
-        var next = new Media(_libVlc, path, FromType.FromPath);
-        var previous = _currentMedia;
-        _currentMedia = next;
-        var ok = Player.Play(next);
-        DisposeMediaDeferred(previous);
-        return ok;
+        Media next;
+        try
+        {
+            next = new Media(_libVlc, path, FromType.FromPath);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return SwapAndPlay(next);
     }
 
     /// <summary>
@@ -173,17 +185,147 @@ public sealed class MediaEngine : IDisposable
         if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
             return false;
 
-        var next = new Media(_libVlc, uri.AbsoluteUri, FromType.FromLocation);
-        // Help LibVLC open remote HTTP(S) / HLS streams without immediate stall.
-        next.AddOption(":network-caching=1500");
-        next.AddOption(":live-caching=1500");
-        next.AddOption(":http-reconnect");
+        return PlayDirectUrl(uri.AbsoluteUri, audioSlaveUrl: null, requireVideoHost);
+    }
 
-        var previous = _currentMedia;
-        _currentMedia = next;
-        var ok = Player.Play(next);
-        DisposeMediaDeferred(previous);
+    /// <summary>
+    /// Play a direct media URL (e.g. yt-dlp resolved googlevideo link).
+    /// Optional <paramref name="audioSlaveUrl"/> for DASH video+audio pairs.
+    /// </summary>
+    public bool PlayDirectUrl(string streamUrl, string? audioSlaveUrl = null, bool requireVideoHost = false)
+    {
+        if (string.IsNullOrWhiteSpace(streamUrl))
+            return false;
+
+        if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
+            return false;
+
+        Media next;
+        try
+        {
+            next = new Media(_libVlc, streamUrl, FromType.FromLocation);
+            next.AddOption(":network-caching=1500");
+            next.AddOption(":live-caching=1500");
+            next.AddOption(":http-reconnect");
+            next.AddOption(":http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            if (!string.IsNullOrWhiteSpace(audioSlaveUrl))
+            {
+                // LibVLC input-slave for separate audio track (DASH).
+                next.AddOption(":input-slave=" + audioSlaveUrl);
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return SwapAndPlay(next);
+    }
+
+    /// <summary>
+    /// Replace media without Stop() first (Stop can freeze the UI).
+    /// Old Media is released later — never dispose while still attached to the player.
+    /// </summary>
+    private bool SwapAndPlay(Media next)
+    {
+        Media? previous;
+        lock (_mediaGate)
+        {
+            previous = _currentMedia;
+            _currentMedia = next;
+        }
+
+        bool ok;
+        try
+        {
+            ok = Player.Play(next);
+        }
+        catch
+        {
+            ok = false;
+        }
+
+        if (previous is not null)
+            QueueMediaRelease(previous);
+
         return ok;
+    }
+
+    private void QueueMediaRelease(Media media)
+    {
+        lock (_mediaGate)
+        {
+            _pendingRelease.Add(media);
+            if (_releaseDrainQueued)
+                return;
+            _releaseDrainQueued = true;
+        }
+
+        // Delay so LibVLC demux can drop the previous media; disposing too early freezes/crashes.
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                await Task.Delay(750).ConfigureAwait(true);
+                DrainReleasedMedia();
+            }
+            finally
+            {
+                lock (_mediaGate)
+                    _releaseDrainQueued = false;
+                // If more media queued during delay, schedule another drain.
+                lock (_mediaGate)
+                {
+                    if (_pendingRelease.Count > 0 && !_releaseDrainQueued)
+                    {
+                        _releaseDrainQueued = true;
+                        Dispatcher.UIThread.Post(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(400).ConfigureAwait(true);
+                                DrainReleasedMedia();
+                            }
+                            finally
+                            {
+                                lock (_mediaGate) _releaseDrainQueued = false;
+                            }
+                        }, DispatcherPriority.Background);
+                    }
+                }
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    private void DrainReleasedMedia()
+    {
+        List<Media> batch;
+        lock (_mediaGate)
+        {
+            if (_pendingRelease.Count == 0)
+                return;
+            batch = [.. _pendingRelease];
+            _pendingRelease.Clear();
+        }
+
+        Media? stillCurrent;
+        Media? stillPlayer;
+        try { stillPlayer = Player.Media; }
+        catch { stillPlayer = null; }
+        lock (_mediaGate) stillCurrent = _currentMedia;
+
+        foreach (var media in batch)
+        {
+            if (ReferenceEquals(media, stillCurrent) || ReferenceEquals(media, stillPlayer))
+            {
+                // Still in use — re-queue.
+                lock (_mediaGate) _pendingRelease.Add(media);
+                continue;
+            }
+
+            try { media.Dispose(); }
+            catch { /* ignore */ }
+        }
     }
 
     /// <summary>Accepts http(s), rtsp, rtmp, mms, and URLs missing a scheme (defaults to https).</summary>
@@ -219,7 +361,8 @@ public sealed class MediaEngine : IDisposable
     /// <summary>Skip no-op Stop when already idle — Stop() can stall the UI thread.</summary>
     public void StopIfActive()
     {
-        if (!IsActive)
+        var s = Player.State;
+        if (s is VLCState.NothingSpecial or VLCState.Stopped or VLCState.Error)
             return;
         try
         {
@@ -231,16 +374,57 @@ public sealed class MediaEngine : IDisposable
         }
     }
 
-    private static void DisposeMediaDeferred(Media? media)
+    /// <summary>
+    /// Mute + pause the inactive engine. Avoids full Stop during same-session switches
+    /// (Stop can freeze). Prefer <see cref="PrepareForHostTeardown"/> before HWND destroy.
+    /// </summary>
+    public void YieldForOtherEngine()
     {
-        if (media is null)
-            return;
-        // Dispose after the player has taken the new media; avoid blocking track switch.
-        Dispatcher.UIThread.Post(() =>
+        try
         {
-            try { media.Dispose(); }
-            catch { /* ignore */ }
-        }, DispatcherPriority.Background);
+            if (Player.Volume != 0)
+                Player.Volume = 0;
+        }
+        catch { /* ignore */ }
+
+        try
+        {
+            var s = Player.State;
+            if (s is VLCState.Playing or VLCState.Buffering or VLCState.Opening)
+                Player.SetPause(true);
+        }
+        catch
+        {
+            // Ignore.
+        }
+    }
+
+    /// <summary>
+    /// Must run before EmbeddedVideoView destroys its HWND (stage collapse).
+    /// Clearing Hwnd while still Opening/Playing is a common LibVLC hard freeze on Windows.
+    /// </summary>
+    public void PrepareForHostTeardown()
+    {
+        try
+        {
+            var s = Player.State;
+            if (s is not (VLCState.NothingSpecial or VLCState.Stopped or VLCState.Error or VLCState.Ended))
+            {
+                try { Player.SetPause(true); }
+                catch { /* ignore */ }
+                try { Player.Stop(); }
+                catch { /* ignore */ }
+            }
+        }
+        catch { /* ignore */ }
+
+        try
+        {
+            // Detach output before the child HWND is destroyed.
+            if (Player.Hwnd != IntPtr.Zero)
+                Player.Hwnd = IntPtr.Zero;
+        }
+        catch { /* ignore */ }
     }
 
     public void TogglePause()
@@ -320,13 +504,22 @@ public sealed class MediaEngine : IDisposable
 
     private void OnTimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e)
     {
+        // LibVLC fires this very often; hop to UI without capturing large state.
         var length = Player.Length;
         var time = e.Time;
-        Dispatcher.UIThread.Post(() => TimeChanged?.Invoke(time, length));
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed) return;
+            TimeChanged?.Invoke(time, length);
+        }, DispatcherPriority.Background);
     }
 
     private void RaisePlaying(bool playing)
-        => Dispatcher.UIThread.Post(() => PlayingChanged?.Invoke(playing));
+        => Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed) return;
+            PlayingChanged?.Invoke(playing);
+        }, DispatcherPriority.Normal);
 
     public void Dispose()
     {
@@ -334,8 +527,18 @@ public sealed class MediaEngine : IDisposable
         _disposed = true;
         Player.EndReached -= OnEndReached;
         Player.TimeChanged -= OnTimeChanged;
-        Player.Stop();
-        _currentMedia?.Dispose();
+        try { Player.Stop(); } catch { /* ignore */ }
+        DrainReleasedMedia();
+        lock (_mediaGate)
+        {
+            try { _currentMedia?.Dispose(); } catch { /* ignore */ }
+            _currentMedia = null;
+            foreach (var m in _pendingRelease)
+            {
+                try { m.Dispose(); } catch { /* ignore */ }
+            }
+            _pendingRelease.Clear();
+        }
         Player.Dispose();
         _libVlc.Dispose();
     }

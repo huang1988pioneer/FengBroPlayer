@@ -18,6 +18,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly MediaEngine _video = new();
     private readonly RecentPlayStore _recent = new();
     private readonly RecentStreamStore _streams = new();
+    private int _selectGeneration;
+    private bool _isSelecting;
     private bool _isSeeking;
     /// <summary>Ignore engine TimeChanged until this tick so scrub UI does not snap back (mp3/mp4).</summary>
     private long _suppressTimeChangedUntilTick;
@@ -231,27 +233,55 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void SelectMedia(MediaItem? item)
     {
         if (item is null) return;
+        // Re-entrant SelectMedia (rapid clicks / layout callbacks) can freeze LibVLC.
+        if (_isSelecting)
+            return;
+        _isSelecting = true;
+        var generation = ++_selectGeneration;
+        try
+        {
+            SelectMediaCore(item, generation);
+        }
+        finally
+        {
+            _isSelecting = false;
+        }
+    }
+
+    private void SelectMediaCore(MediaItem item, int generation)
+    {
+        var previousKind = ActiveMediaKind;
+        var nextKind = item.Kind == MediaKind.None ? MediaKind.None : item.Kind;
+
+        // CRITICAL: stop video and detach HWND *before* stage row collapses (Height=0 destroys
+        // the native host). Clearing Hwnd while still Playing is a common hard freeze on Windows.
+        if (previousKind == MediaKind.Video && nextKind != MediaKind.Video)
+            _video.PrepareForHostTeardown();
 
         MarkCurrent(item);
-        ActiveMediaKind = item.Kind == MediaKind.None ? MediaKind.None : item.Kind;
+        ActiveMediaKind = nextKind;
+        if (generation != _selectGeneration)
+            return;
 
-        if (item.Kind == MediaKind.Audio)
+        if (nextKind == MediaKind.Audio)
         {
-            // Avoid Stop on idle video engine — Stop() stalls UI during rapid playlist clicks.
-            _video.StopIfActive();
+            _video.YieldForOtherEngine();
+            // Restore audio engine volume (may have been muted if we previously yielded it).
+            _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
+
             if (item.IsLocalFile && item.FilePath is not null)
             {
                 _audio.Play(item.FilePath);
                 _audio.SetRate((float)PlaybackRate);
                 IsPlaying = true;
                 StatusMessage = $"正在播放：{item.Title}";
-                RecordRecent(item);
+                RecordRecentDeferred(item);
             }
             else if (item.IsNetworkSource && item.SourceUrl is not null)
             {
                 PlayNetworkAudio(item.SourceUrl, item.Title);
                 if (IsPlaying)
-                    RecordRecent(item);
+                    RecordRecentDeferred(item);
             }
             else
             {
@@ -260,18 +290,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 StatusMessage = $"示範曲目（無檔案）：{item.Title} — 請開啟本機音樂";
             }
         }
-        else if (item.Kind == MediaKind.Video)
+        else if (nextKind == MediaKind.Video)
         {
-            _audio.StopIfActive();
+            _audio.YieldForOtherEngine();
+            _video.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
+
             if (item.IsLocalFile && item.FilePath is not null)
             {
-                PlayLocalVideo(item.FilePath, item.Title);
-                RecordRecent(item);
+                PlayLocalVideo(item.FilePath, item.Title, generation);
+                RecordRecentDeferred(item);
             }
             else if (item.IsNetworkSource && item.SourceUrl is not null)
             {
-                PlayNetworkVideo(item.SourceUrl, item.Title);
-                RecordRecent(item);
+                PlayNetworkVideo(item.SourceUrl, item.Title, generation);
+                RecordRecentDeferred(item);
             }
             else
             {
@@ -282,12 +314,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void RecordRecent(MediaItem item)
+    /// <summary>History write runs after the frame so Play is not blocked by JSON/disk I/O.</summary>
+    private void RecordRecentDeferred(MediaItem item)
     {
         if (!item.IsPlayable) return;
-        _recent.Record(item);
-        if (item.IsNetworkSource)
-            _streams.Record(item);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _recent.Record(item);
+            if (item.IsNetworkSource)
+                _streams.Record(item);
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     [RelayCommand]
@@ -408,7 +444,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         StatusMessage = "已清除最近網路串流紀錄";
     }
 
-    private void PlayLocalVideo(string path, string title)
+    private void PlayLocalVideo(string path, string title, int generation = 0)
     {
         PrepareVideoHost?.Invoke();
         if (_video.Play(path, requireVideoHost: true))
@@ -421,8 +457,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
         {
-            for (var i = 0; i < 10; i++)
+            for (var i = 0; i < 12; i++)
             {
+                if (generation != 0 && generation != _selectGeneration)
+                    return;
                 PrepareVideoHost?.Invoke();
                 if (_video.Play(path, requireVideoHost: true))
                 {
@@ -431,8 +469,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     StatusMessage = $"正在播放影片：{title}";
                     return;
                 }
-                await Task.Delay(50);
+                await Task.Delay(40);
             }
+            if (generation != 0 && generation != _selectGeneration)
+                return;
             StatusMessage = "無法嵌入影片畫面（主機控制項尚未就緒）。請再按一次播放。";
             IsPlaying = false;
         }, Avalonia.Threading.DispatcherPriority.Background);
@@ -440,6 +480,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private void PlayNetworkAudio(string url, string title)
     {
+        if (StreamResolver.NeedsExtraction(url))
+        {
+            StatusMessage = "正在解析網路音訊（yt-dlp）…";
+            _ = PlayExtractedNetworkAsync(url, title, generation: _selectGeneration, preferVideo: false);
+            return;
+        }
+
         // Audio engine needs no HWND — works even while stage is in idle/audio layout.
         if (_audio.PlayUrl(url, requireVideoHost: false))
         {
@@ -453,8 +500,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsPlaying = false;
     }
 
-    private void PlayNetworkVideo(string url, string title)
+    private void PlayNetworkVideo(string url, string title, int generation = 0)
     {
+        if (StreamResolver.NeedsExtraction(url))
+        {
+            StatusMessage = "正在解析 YouTube / 網頁串流（yt-dlp）…";
+            _ = PlayExtractedNetworkAsync(url, title, generation == 0 ? _selectGeneration : generation, preferVideo: true);
+            return;
+        }
+
         // Prefer embedded video when host is ready; retry after stage layout creates HWND.
         PrepareVideoHost?.Invoke();
         if (_video.PlayUrl(url, requireVideoHost: true))
@@ -470,6 +524,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             for (var i = 0; i < 15; i++)
             {
+                if (generation != 0 && generation != _selectGeneration)
+                    return;
+
                 PrepareVideoHost?.Invoke();
                 if (_video.PlayUrl(url, requireVideoHost: true))
                 {
@@ -482,18 +539,21 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 // Host still missing — try audio engine so pure-audio URLs still play.
                 if (i >= 4 && _audio.PlayUrl(url, requireVideoHost: false))
                 {
-                    _video.StopIfActive();
+                    _video.PrepareForHostTeardown();
                     ActiveMediaKind = MediaKind.Audio;
+                    _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
                     _audio.SetRate((float)PlaybackRate);
                     IsPlaying = true;
                     StatusMessage = $"已以音訊模式播放網路串流：{title}";
                     return;
                 }
 
-                await Task.Delay(50);
+                await Task.Delay(40);
             }
 
-            // Last attempt without host gate (may show no video surface).
+            if (generation != 0 && generation != _selectGeneration)
+                return;
+
             if (_video.HasVideoHost && _video.PlayUrl(url, requireVideoHost: true))
             {
                 _video.SetRate((float)PlaybackRate);
@@ -503,9 +563,102 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
 
             StatusMessage =
-                "無法開啟網路串流。請確認為可直接播放的 http(s)/rtsp 媒體網址（非需登入頁面）；YouTube 等站台可能需系統 VLC 腳本支援。";
+                "無法開啟網路串流。請確認為可直接播放的 http(s)/rtsp 媒體網址；YouTube 請安裝 yt-dlp 並確保可在終端機執行。";
             IsPlaying = false;
         }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private async Task PlayExtractedNetworkAsync(string pageUrl, string title, int generation, bool preferVideo)
+    {
+        void Fail(string message)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (generation != _selectGeneration) return;
+                IsPlaying = false;
+                StatusMessage = message;
+            });
+        }
+
+        if (!StreamResolver.IsYtDlpAvailable())
+        {
+            Fail("無法播放此網頁影片：需要 yt-dlp。請執行 winget install yt-dlp.yt-dlp 後重新開啟播放器。");
+            return;
+        }
+
+        StreamResolver.ResolvedStream? resolved;
+        try
+        {
+            resolved = await StreamResolver.ResolveAsync(pageUrl).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Fail($"解析串流失敗：{ex.Message}");
+            return;
+        }
+
+        if (resolved is null)
+        {
+            Fail("yt-dlp 無法解析此網址（可能需更新：yt-dlp -U）。請確認網路與影片可公開存取。");
+            return;
+        }
+
+        var display = string.IsNullOrWhiteSpace(resolved.Title) ? title : resolved.Title;
+
+        for (var i = 0; i < 12; i++)
+        {
+            if (generation != _selectGeneration)
+                return;
+
+            var started = false;
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (generation != _selectGeneration)
+                    return;
+
+                WindowTitle = $"{display} — 多媒體播放器";
+
+                if (preferVideo)
+                {
+                    PrepareVideoHost?.Invoke();
+                    if (_video.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: true))
+                    {
+                        _video.SetRate((float)PlaybackRate);
+                        IsPlaying = true;
+                        StatusMessage = $"正在播放：{display}";
+                        started = true;
+                        return;
+                    }
+
+                    // After a few tries, fall back to audio path.
+                    if (i >= 5 &&
+                        _audio.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: false))
+                    {
+                        _video.PrepareForHostTeardown();
+                        ActiveMediaKind = MediaKind.Audio;
+                        _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
+                        _audio.SetRate((float)PlaybackRate);
+                        IsPlaying = true;
+                        StatusMessage = $"已以音訊模式播放：{display}";
+                        started = true;
+                    }
+                }
+                else if (_audio.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: false))
+                {
+                    _audio.SetRate((float)PlaybackRate);
+                    IsPlaying = true;
+                    StatusMessage = $"正在播放網路音訊：{display}";
+                    started = true;
+                }
+            });
+
+            if (started)
+                return;
+
+            await Task.Delay(40).ConfigureAwait(false);
+        }
+
+        Fail($"無法播放已解析的串流：{display}");
     }
 
     [RelayCommand]
@@ -792,9 +945,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         var isVideo = MediaMetadata.IsVideo(path) || LooksLikeStreamPlaylist(path);
         var kind = isAudio && !isVideo ? MediaKind.Audio : MediaKind.Video;
 
-        var title = uri.Host.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
-                    uri.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase)
-            ? "YouTube 影片"
+        var title = StreamResolver.NeedsExtraction(uri)
+            ? (uri.Host.Contains("youtu", StringComparison.OrdinalIgnoreCase) ? "YouTube 影片" : uri.Host)
             : !string.IsNullOrWhiteSpace(Path.GetFileName(path)) && path != "/"
                 ? Uri.UnescapeDataString(Path.GetFileName(path))
                 : uri.Host;

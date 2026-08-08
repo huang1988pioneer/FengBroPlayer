@@ -26,6 +26,8 @@
 
 本機音訊／影片以 **LibVLC** 實際播放。清除清單會清空佇列並停止播放。
 
+**YouTube / 網頁影片：** 需系統安裝 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（`winget install yt-dlp.yt-dlp`）。播放器會用 yt-dlp 解析直連串流再交由 LibVLC 播放。
+
 ## 快捷鍵
 
 | 按鍵 | 功能 |

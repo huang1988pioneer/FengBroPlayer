@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using MusicVideoMediaPlayer.Models;
 
 namespace MusicVideoMediaPlayer.Services;
@@ -12,6 +14,7 @@ namespace MusicVideoMediaPlayer.Services;
 /// <summary>
 /// Persists recently opened network stream URLs (separate from local recent play).
 /// Stored under LocalApplicationData as recent-streams.json.
+/// Disk writes are debounced so source switching stays responsive.
 /// </summary>
 public sealed class RecentStreamStore
 {
@@ -25,6 +28,8 @@ public sealed class RecentStreamStore
     };
 
     private readonly string _filePath;
+    private readonly object _saveGate = new();
+    private CancellationTokenSource? _saveCts;
     private bool _loaded;
 
     public ObservableCollection<RecentPlayEntry> Items { get; } = [];
@@ -102,6 +107,15 @@ public sealed class RecentStreamStore
         Load();
 
         var absolute = uri.AbsoluteUri;
+
+        if (Items.Count > 0 &&
+            string.Equals(Items[0].SourceUrl, absolute, StringComparison.OrdinalIgnoreCase))
+        {
+            Items[0].PlayedAtUtc = DateTime.UtcNow;
+            ScheduleSave();
+            return true;
+        }
+
         for (var i = Items.Count - 1; i >= 0; i--)
         {
             if (string.Equals(Items[i].SourceUrl, absolute, StringComparison.OrdinalIgnoreCase))
@@ -129,7 +143,7 @@ public sealed class RecentStreamStore
         while (Items.Count > MaxEntries)
             Items.RemoveAt(Items.Count - 1);
 
-        Save();
+        ScheduleSave();
         return true;
     }
 
@@ -137,7 +151,7 @@ public sealed class RecentStreamStore
     {
         Load();
         if (Items.Remove(entry))
-            Save();
+            ScheduleSave();
     }
 
     public void Clear()
@@ -145,34 +159,51 @@ public sealed class RecentStreamStore
         Load();
         if (Items.Count == 0) return;
         Items.Clear();
-        Save();
+        ScheduleSave();
     }
 
-    public void Save()
+    public void ScheduleSave()
     {
-        try
+        List<StreamEntryDto> snapshot;
+        lock (_saveGate)
         {
-            var dto = new StreamFileDto
+            snapshot = Items.Select(e => new StreamEntryDto
             {
-                Entries = Items.Select(e => new StreamEntryDto
-                {
-                    Title = e.Title,
-                    SourceUrl = e.SourceUrl,
-                    Kind = e.Kind.ToString(),
-                    Duration = e.Duration,
-                    Format = e.Format,
-                    CoverHue = e.CoverHue,
-                    Bitrate = e.Bitrate,
-                    PlayedAtUtc = e.PlayedAtUtc
-                }).ToList()
-            };
-            File.WriteAllText(_filePath, JsonSerializer.Serialize(dto, JsonOptions));
+                Title = e.Title,
+                SourceUrl = e.SourceUrl,
+                Kind = e.Kind.ToString(),
+                Duration = e.Duration,
+                Format = e.Format,
+                CoverHue = e.CoverHue,
+                Bitrate = e.Bitrate,
+                PlayedAtUtc = e.PlayedAtUtc
+            }).ToList();
         }
-        catch
+
+        _saveCts?.Cancel();
+        _saveCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _saveCts = cts;
+        var path = _filePath;
+        _ = Task.Run(async () =>
         {
-            // Best-effort persistence.
-        }
+            try
+            {
+                await Task.Delay(350, cts.Token).ConfigureAwait(false);
+                var dto = new StreamFileDto { Entries = snapshot };
+                var json = JsonSerializer.Serialize(dto, JsonOptions);
+                await File.WriteAllTextAsync(path, json, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+            }
+        }, cts.Token);
     }
+
+    public void Save() => ScheduleSave();
 
     private sealed class StreamFileDto
     {
