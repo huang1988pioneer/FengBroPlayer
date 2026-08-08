@@ -11,6 +11,13 @@
     <AvaloniaResource Include="Styles\**" />
   </ItemGroup>
 
+  <!-- Nested probe project; must not be compiled into the main app. -->
+  <ItemGroup>
+    <Compile Remove="_vlc_probe\**" />
+    <None Remove="_vlc_probe\**" />
+    <EmbeddedResource Remove="_vlc_probe\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />

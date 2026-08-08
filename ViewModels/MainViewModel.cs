@@ -71,7 +71,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public MainViewModel()
     {
-        SeedDemoPlaylist();
         SeedWaveform();
         ApplyStageFlags(MediaKind.None);
 
@@ -153,37 +152,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         MediaKind.Video => _video,
         _ => null
     };
-
-    private void SeedDemoPlaylist()
-    {
-        Playlist.Add(new MediaItem
-        {
-            Index = 1,
-            Title = "稻香",
-            Subtitle = "周杰倫 · 示範",
-            Duration = "03:43",
-            Kind = MediaKind.Audio,
-            CoverHue = "42",
-            Format = "MP3",
-            Bitrate = "320kbps"
-        });
-        Playlist.Add(new MediaItem
-        {
-            Index = 2,
-            Title = "瑞士旅行 Vlog",
-            Subtitle = "本機影片 · 示範",
-            Duration = "10:30",
-            Kind = MediaKind.Video,
-            CoverHue = "195",
-            Format = "MP4"
-        });
-        CurrentMedia = Playlist[0];
-        CurrentMedia.IsCurrent = true;
-        ActiveMediaKind = MediaKind.Audio;
-        DurationText = CurrentMedia.Duration;
-        WindowTitle = $"{CurrentMedia.Title} — 多媒體播放器";
-        StatusMessage = "就緒 — 示範清單（無實際檔案）。請開啟本機媒體。";
-    }
 
     private void SeedWaveform()
     {
