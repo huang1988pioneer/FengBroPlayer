@@ -18,7 +18,6 @@
         MinHeight="560"
         Background="{StaticResource BgAppBrush}"
         WindowStartupLocation="CenterScreen"
-        KeyDown="OnWindowKeyDown"
         PointerMoved="OnWindowPointerMoved"
         DragDrop.AllowDrop="True">
 
@@ -97,6 +96,9 @@
                 <MenuItem Header="全螢幕"
                           Command="{Binding ToggleFullscreenCommand}"
                           InputGesture="F" />
+                <MenuItem Header="影片資訊"
+                          Command="{Binding ToggleMediaInfoCommand}"
+                          InputGesture="Tab" />
             </MenuItem>
         </Menu>
 
@@ -120,6 +122,43 @@
                                             MediaPlayer="{Binding VideoMediaPlayer}"
                                             HorizontalAlignment="Stretch"
                                             VerticalAlignment="Stretch" />
+                </Border>
+
+                <!-- Tab toggles this compact overlay without interrupting playback. -->
+                <Border IsVisible="{Binding IsMediaInfoVisible}"
+                        ZIndex="2"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Margin="18"
+                        MaxWidth="440"
+                        Padding="14,12"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Background="#E6171717"
+                        BorderBrush="{StaticResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        IsHitTestVisible="False">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="影片資訊" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}" />
+                        <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='尚未載入影片'}"
+                                   FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding CurrentMedia.Subtitle}"
+                                   Classes="subtitle"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding StatusDetail}"
+                                   Classes="muted"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding PositionText}"
+                                   Classes="muted" />
+                        <TextBlock Text="{Binding DurationText}"
+                                   Classes="muted" />
+                        <TextBlock Text="{Binding CurrentMedia.SourceUrl, FallbackValue='本機媒體檔'}"
+                                   Classes="muted"
+                                   MaxWidth="410"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
                 </Border>
 
                 <!-- Audio / idle stage -->

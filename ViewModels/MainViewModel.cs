@@ -29,6 +29,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private bool _playlistVisibleBeforeFs = true;
     private double _volumeBeforeMute = 1.0;
     private bool _suppressChromeSideEffects;
+    private long _lastInfoOverlaySecond = -1;
 
     /// <summary>Set by the view to open native file pickers.</summary>
     public Func<string, Task<IReadOnlyList<string>>>? PickFilesAsync { get; set; }
@@ -82,6 +83,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] public partial bool IsVideoStage { get; set; }
     [ObservableProperty] public partial bool IsAudioStage { get; set; }
+    [ObservableProperty] public partial bool IsMediaInfoVisible { get; set; }
     [ObservableProperty] public partial bool HasPlayableMedia { get; set; }
     [ObservableProperty] public partial bool HasRecentItems { get; set; }
     [ObservableProperty] public partial bool HasRecentStreamItems { get; set; }
@@ -131,7 +133,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsStreamDock));
     }
 
-    partial void OnActiveMediaKindChanged(MediaKind value) => ApplyStageFlags(value);
+    partial void OnActiveMediaKindChanged(MediaKind value)
+    {
+        ApplyStageFlags(value);
+        if (value != MediaKind.Video)
+        {
+            IsMediaInfoVisible = false;
+            _video.SetVideoInfoOverlay(null);
+        }
+    }
 
     private void ApplyStageFlags(MediaKind value)
     {
@@ -774,7 +784,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
                     // Host still missing — audio path so user at least hears content.
                     if (i >= 8 &&
-                        _audio.PlayDirectUrl(streamUrl, resolved.AudioUrl, requireVideoHost: false, httpReferrer: pageUrl))
+                        _audio.PlayDirectUrl(resolved.AudioUrl ?? streamUrl, null, requireVideoHost: false, httpReferrer: pageUrl))
                     {
                         _video.PrepareForHostTeardown();
                         ActiveMediaKind = MediaKind.Audio;
@@ -784,8 +794,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                         started = true;
                     }
                 }
-                else if (_audio.PlayDirectUrl(streamUrl, resolved.AudioUrl, requireVideoHost: false, httpReferrer: pageUrl)
-                         || _audio.PlayDirectUrl(streamUrl, null, requireVideoHost: false, httpReferrer: pageUrl))
+                else if (_audio.PlayDirectUrl(resolved.AudioUrl ?? streamUrl, null, requireVideoHost: false, httpReferrer: pageUrl))
                 {
                     _audio.SetRate((float)PlaybackRate);
                     IsPlaying = true;
@@ -1424,6 +1433,38 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             : ChromeMode.Fullscreen;
     }
 
+    [RelayCommand]
+    private void ToggleMediaInfo()
+    {
+        if (!IsVideoStage) return;
+        IsMediaInfoVisible = !IsMediaInfoVisible;
+        _lastInfoOverlaySecond = -1;
+        RefreshVideoInfoOverlay();
+    }
+
+    private void RefreshVideoInfoOverlay()
+    {
+        if (!IsVideoStage || !IsMediaInfoVisible || CurrentMedia is null)
+        {
+            _video.SetVideoInfoOverlay(null);
+            return;
+        }
+
+        var item = CurrentMedia;
+        var source = item.SourceUrl ?? item.FilePath ?? "";
+        var details = string.Join(" · ", new[] { item.Format, item.Bitrate }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var text = string.Join("\n", new[]
+        {
+            item.Title,
+            item.Subtitle,
+            details,
+            $"{PositionText} / {DurationText}",
+            source
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        _video.SetVideoInfoOverlay(text);
+    }
+
     /// <summary>View reports system Esc or external exit without re-entering FS side effects loop.</summary>
     public void NotifyExitedFullscreen()
     {
@@ -1535,6 +1576,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             DurationText = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(lengthMs));
         PositionText = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(timeMs));
         UpdateCurrentLyric(timeMs);
+        if (IsMediaInfoVisible && timeMs / 1000 != _lastInfoOverlaySecond)
+        {
+            _lastInfoOverlaySecond = timeMs / 1000;
+            RefreshVideoInfoOverlay();
+        }
     }
 
     private void OnEngineEndReached(MediaKind kind)

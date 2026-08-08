@@ -58,6 +58,9 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         AddHandler(DragDrop.DropEvent, OnDrop);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        // Handle Tab before Avalonia's normal focus navigation. The XAML bubble
+        // handler was too late, so Tab still moved focus like a standard window.
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // Slider marks pointer events Handled on the thumb/track; XAML handlers miss them
         // unless we subscribe with handledEventsToo. Without BeginSeek, Progress snaps back
@@ -499,6 +502,10 @@ public partial class MainWindow : Window
                 break;
             case Key.F:
                 vm.ToggleFullscreenCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Tab:
+                vm.ToggleMediaInfoCommand.Execute(null);
                 e.Handled = true;
                 break;
             case Key.Escape:

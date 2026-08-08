@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using LibVLCSharp.Shared;
@@ -39,7 +40,7 @@ public sealed class MediaEngine : IDisposable
         Player = new MediaPlayer(_libVlc);
         Player.EndReached += OnEndReached;
         Player.TimeChanged += OnTimeChanged;
-        Player.Playing += (_, _) => RaisePlaying(true);
+        Player.Playing += OnPlaying;
         Player.Paused += (_, _) => RaisePlaying(false);
         Player.Stopped += (_, _) => RaisePlaying(false);
     }
@@ -222,8 +223,10 @@ public sealed class MediaEngine : IDisposable
 
             if (!string.IsNullOrWhiteSpace(audioSlaveUrl))
             {
-                // Quote slave URL — raw & in query strings breaks LibVLC option parsing.
-                next.AddOption(":input-slave=" + audioSlaveUrl.Replace(":", "\\:", StringComparison.Ordinal));
+                // AddOption receives one complete VLC option, not a shell command.
+                // Escaping the scheme colon changes https:// into an invalid URI for
+                // LibVLC, so Bilibili's separate DASH audio stream was discarded.
+                next.AddOption(":input-slave=" + audioSlaveUrl.Trim());
             }
         }
         catch
@@ -521,6 +524,59 @@ public sealed class MediaEngine : IDisposable
     private void OnEndReached(object? sender, EventArgs e)
         => Dispatcher.UIThread.Post(() => EndReached?.Invoke());
 
+    private void OnPlaying(object? sender, EventArgs e)
+    {
+        RaisePlaying(true);
+        // A media swap after a DASH stream can leave LibVLC on the disabled
+        // audio track. Select the first real track once parsing has completed.
+        Dispatcher.UIThread.Post(async () =>
+        {
+            await Task.Delay(180);
+            if (!_disposed)
+                SelectFirstAudioTrack();
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>Draws text inside the native LibVLC video surface (OSD).</summary>
+    public void SetVideoInfoOverlay(string? text)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                Player.SetMarqueeInt(VideoMarqueeOption.Enable, 0);
+                return;
+            }
+
+            Player.SetMarqueeString(VideoMarqueeOption.Text, text);
+            Player.SetMarqueeInt(VideoMarqueeOption.Color, 0xFFFFFF);
+            Player.SetMarqueeInt(VideoMarqueeOption.Opacity, 235);
+            // libvlc_position_t: TopLeft = 5.
+            Player.SetMarqueeInt(VideoMarqueeOption.Position, 5);
+            Player.SetMarqueeInt(VideoMarqueeOption.Size, 18);
+            Player.SetMarqueeInt(VideoMarqueeOption.Timeout, 0);
+            Player.SetMarqueeInt(VideoMarqueeOption.Enable, 1);
+        }
+        catch
+        {
+            // OSD is unavailable before the native video output is ready.
+        }
+    }
+
+    private void SelectFirstAudioTrack()
+    {
+        try
+        {
+            var track = Player.AudioTrackDescription?.FirstOrDefault(t => t.Id >= 0);
+            if (track is not null)
+                Player.SetAudioTrack(track.Value.Id);
+        }
+        catch
+        {
+            // Audio-only media and streams without a parsed track are valid.
+        }
+    }
+
     private long _lastTimeUiPostMs;
 
     private void OnTimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e)
@@ -553,6 +609,7 @@ public sealed class MediaEngine : IDisposable
         if (_disposed) return;
         _disposed = true;
         Player.EndReached -= OnEndReached;
+        Player.Playing -= OnPlaying;
         Player.TimeChanged -= OnTimeChanged;
         try { Player.Stop(); } catch { /* ignore */ }
         DrainReleasedMedia();

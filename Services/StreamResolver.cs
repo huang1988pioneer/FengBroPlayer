@@ -124,15 +124,15 @@ public static class StreamResolver
         if (ytdlp is null)
             return null;
 
-        // Prefer progressive HTTPS MP4 for LibVLC (single file, no HLS/DASH glue).
-        // Bilibili normally serves DASH: its best video stream has no audio.
-        // Request an explicit video+audio pair before trying progressive fallbacks.
-        var formatCandidates = new[]
-        {
-            "bv*+ba/b",
-            "best[ext=mp4][protocol^=http][protocol!*=m3u8]/best[ext=mp4][protocol^=http]/18/22/best[ext=mp4]/b",
-            "b/best",
-        };
+        // YouTube still exposes a progressive format for many videos. Prefer it:
+        // LibVLC then receives one fully muxed stream and cannot lose the audio
+        // slave. Bilibili is normally DASH-only, so it must start with a pair.
+        var isBilibili = pageUri.Host.Contains("bilibili.com", StringComparison.OrdinalIgnoreCase);
+        var progressive = "best[acodec!=none][vcodec!=none][protocol^=http][protocol!*=m3u8]"
+                          + "/best[acodec!=none][vcodec!=none]/18/22";
+        var formatCandidates = isBilibili
+            ? new[] { "bv*+ba/b", progressive, "b/best" }
+            : new[] { progressive, "bv*+ba/b", "b/best" };
 
         foreach (var format in formatCandidates)
         {
