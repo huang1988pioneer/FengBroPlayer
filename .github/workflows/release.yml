@@ -72,6 +72,8 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
+      # gh release create needs a git repo (or -R); checkout so notes/target resolve.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -82,10 +84,17 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if ((${#assets[@]} == 0)); then
+            echo "No release assets found" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" -R "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$RELEASE_TAG" release-assets/* \
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              -R "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "MusicVideoMediaPlayer $RELEASE_TAG" \
               --generate-notes
