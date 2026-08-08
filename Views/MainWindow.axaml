@@ -50,6 +50,15 @@
                 <MenuItem Header="開啟網路串流…"
                           Command="{Binding OpenNetworkUrlCommand}" />
                 <Separator />
+                <MenuItem Header="最近播放"
+                          Command="{Binding ShowRecentDockCommand}" />
+                <MenuItem Header="最近網路串流"
+                          Command="{Binding ShowStreamDockCommand}" />
+                <MenuItem Header="清除最近播放"
+                          Command="{Binding ClearRecentCommand}" />
+                <MenuItem Header="清除最近網路串流"
+                          Command="{Binding ClearRecentStreamsCommand}" />
+                <Separator />
                 <MenuItem Header="結束"
                           Command="{Binding ExitCommand}" />
             </MenuItem>
@@ -193,25 +202,43 @@
                 </Border>
             </Grid>
 
-            <!-- Playlist dock -->
+            <!-- Playlist / Recent dock -->
             <Border Grid.Column="1"
                     Width="300"
                     IsVisible="{Binding IsPlaylistVisible}"
                     Background="{StaticResource BgPanelBrush}"
                     BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="1,0,0,0">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid ColumnDefinitions="*,Auto,Auto"
-                          Margin="12,10,8,8"
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <!-- Tabs: 播放清單 | 最近 | 串流 -->
+                    <StackPanel Orientation="Horizontal"
+                                Margin="8,10,8,4"
+                                Spacing="4">
+                        <Button Classes="dock-tab"
+                                Classes.active="{Binding IsPlaylistDock}"
+                                Content="清單"
+                                Command="{Binding ShowPlaylistDockCommand}"
+                                ToolTip.Tip="播放清單" />
+                        <Button Classes="dock-tab"
+                                Classes.active="{Binding IsRecentDock}"
+                                Content="最近"
+                                Command="{Binding ShowRecentDockCommand}"
+                                ToolTip.Tip="最近播放（本機+網路）" />
+                        <Button Classes="dock-tab"
+                                Classes.active="{Binding IsStreamDock}"
+                                Content="串流"
+                                Command="{Binding ShowStreamDockCommand}"
+                                ToolTip.Tip="最近網路串流" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="1"
+                          ColumnDefinitions="*,Auto"
+                          Margin="12,4,8,8"
                           ColumnSpacing="6">
-                        <TextBlock Text="播放清單"
-                                   Classes="title"
-                                   FontSize="13.5"
-                                   VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
+                        <StackPanel Orientation="Horizontal"
                                     Spacing="6"
-                                    VerticalAlignment="Center">
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding IsPlaylistDock}">
                             <TextBlock Text="自動播放"
                                        Classes="muted"
                                        FontSize="11"
@@ -219,17 +246,30 @@
                             <ToggleSwitch Classes="autoplay"
                                           IsChecked="{Binding AutoPlay}" />
                         </StackPanel>
-                        <Button Grid.Column="2"
+                        <TextBlock IsVisible="{Binding IsRecentDock}"
+                                   Text="最多 50 筆，重開仍可讀取"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap" />
+                        <TextBlock IsVisible="{Binding IsStreamDock}"
+                                   Text="網路串流最多 30 筆"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap" />
+                        <Button Grid.Column="1"
                                 Classes="ghost"
                                 Content="清除"
-                                Command="{Binding ClearPlaylistCommand}"
-                                ToolTip.Tip="清除播放清單" />
+                                Command="{Binding ClearDockCommand}"
+                                ToolTip.Tip="清除目前分頁內容" />
                     </Grid>
 
-                    <!-- ListBox virtualizes rows; ItemsControl+ScrollViewer realized every item. -->
-                    <ListBox Grid.Row="1"
+                    <!-- Playlist -->
+                    <ListBox Grid.Row="2"
                              Margin="4,0,4,8"
                              Classes="playlist"
+                             IsVisible="{Binding IsPlaylistDock}"
                              ItemsSource="{Binding Playlist}"
                              SelectedItem="{Binding CurrentMedia, Mode=OneWay}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -280,6 +320,144 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!-- Recent (local + network) -->
+                    <Grid Grid.Row="2" IsVisible="{Binding IsRecentDock}">
+                        <TextBlock Text="尚無最近播放紀錄&#x0a;播放本機或網路媒體後會自動出現"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="16"
+                                   IsVisible="{Binding !HasRecentItems}" />
+                        <ListBox Margin="4,0,4,8"
+                                 Classes="playlist"
+                                 IsVisible="{Binding HasRecentItems}"
+                                 ItemsSource="{Binding RecentItems}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:RecentPlayEntry">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                        <Button Classes="playlist-row"
+                                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).PlayRecentCommand}"
+                                                CommandParameter="{Binding}"
+                                                HorizontalAlignment="Stretch"
+                                                ToolTip.Tip="{Binding Subtitle}">
+                                            <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding KindLabel}"
+                                                           Classes="muted"
+                                                           FontSize="10"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Center" />
+                                                <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="muted"
+                                                               FontSize="11"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0} · {1}">
+                                                                <Binding Path="PlayedAtText" />
+                                                                <Binding Path="Duration" />
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding Format}"
+                                                           Classes="muted"
+                                                           FontSize="10"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1"
+                                                Classes="ghost"
+                                                Content="×"
+                                                Width="28"
+                                                Height="28"
+                                                VerticalAlignment="Center"
+                                                ToolTip.Tip="移除此筆"
+                                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveRecentCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <!-- Recent network streams only -->
+                    <Grid Grid.Row="2" IsVisible="{Binding IsStreamDock}">
+                        <TextBlock Text="尚無網路串流紀錄&#x0a;開啟網路串流後會自動記錄"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="16"
+                                   IsVisible="{Binding !HasRecentStreamItems}" />
+                        <ListBox Margin="4,0,4,8"
+                                 Classes="playlist"
+                                 IsVisible="{Binding HasRecentStreamItems}"
+                                 ItemsSource="{Binding RecentStreamItems}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:RecentPlayEntry">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                        <Button Classes="playlist-row"
+                                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).PlayRecentStreamCommand}"
+                                                CommandParameter="{Binding}"
+                                                HorizontalAlignment="Stretch"
+                                                ToolTip.Tip="{Binding SourceUrl}">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                <StackPanel Spacing="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding SourceUrl}"
+                                                               Classes="muted"
+                                                               FontSize="10"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="muted" FontSize="10">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0} · {1}">
+                                                                <Binding Path="PlayedAtText" />
+                                                                <Binding Path="KindLabel" />
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Format}"
+                                                           Classes="muted"
+                                                           FontSize="10"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1"
+                                                Classes="ghost"
+                                                Content="×"
+                                                Width="28"
+                                                Height="28"
+                                                VerticalAlignment="Center"
+                                                ToolTip.Tip="移除此串流"
+                                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).RemoveRecentStreamCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

@@ -247,21 +247,25 @@ public partial class MainWindow : Window
 
     private async Task<string?> PromptNetworkUrlAsync()
     {
+        var vm = DataContext as MainViewModel;
         var box = new TextBox
         {
             PlaceholderText = "https://example.com/stream.m3u8 或音訊/影片直連網址",
             MinWidth = 400,
-            Text = (DataContext as MainViewModel)?.NetworkUrl ?? "",
+            Text = vm?.NetworkUrl ?? "",
             Classes = { "search" }
         };
 
+        var hasHistory = vm is { HasRecentStreamItems: true };
         var dialog = new Window
         {
             Title = "開啟網路串流",
-            Width = 480,
-            Height = 180,
+            Width = 520,
+            Height = hasHistory ? 420 : 190,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            CanResize = false,
+            CanResize = true,
+            MinWidth = 420,
+            MinHeight = hasHistory ? 320 : 180,
             Background = Background
         };
 
@@ -296,31 +300,91 @@ public partial class MainWindow : Window
             return b;
         }
 
-        dialog.Content = new StackPanel
+        var root = new StackPanel
         {
             Margin = new Avalonia.Thickness(16),
-            Spacing = 12,
+            Spacing = 12
+        };
+
+        root.Children.Add(new TextBlock
+        {
+            Text = "輸入可直接播放的串流網址（http/https/rtsp，可省略 https://）：",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+        });
+        root.Children.Add(box);
+
+        if (vm is not null && vm.RecentStreamItems.Count > 0)
+        {
+            root.Children.Add(new TextBlock
+            {
+                Text = "最近網路串流（點一下填入並播放）：",
+                Classes = { "muted" },
+                FontSize = 12
+            });
+
+            var historyPanel = new StackPanel { Spacing = 2 };
+            foreach (var entry in vm.RecentStreamItems.Take(12))
+            {
+                var url = entry.SourceUrl;
+                if (string.IsNullOrWhiteSpace(url)) continue;
+
+                var row = new Button
+                {
+                    Classes = { "playlist-row" },
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                    Padding = new Avalonia.Thickness(10, 8),
+                    Content = new StackPanel
+                    {
+                        Spacing = 2,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = entry.Title,
+                                FontSize = 13,
+                                TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis
+                            },
+                            new TextBlock
+                            {
+                                Text = url,
+                                Classes = { "muted" },
+                                FontSize = 11,
+                                TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis
+                            }
+                        }
+                    }
+                };
+                row.Click += (_, _) =>
+                {
+                    box.Text = url;
+                    result = url;
+                    dialog.Close();
+                };
+                historyPanel.Children.Add(row);
+            }
+
+            root.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 200,
+                Content = historyPanel,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+            });
+        }
+
+        root.Children.Add(new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Spacing = 8,
             Children =
             {
-                new TextBlock
-                {
-                    Text = "輸入可直接播放的串流網址（http/https/rtsp，可省略 https://）：",
-                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
-                },
-                box,
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Spacing = 8,
-                    Children =
-                    {
-                        CreateDialogButton("取消", false),
-                        CreateDialogButton("播放", true)
-                    }
-                }
+                CreateDialogButton("取消", false),
+                CreateDialogButton("播放", true)
             }
-        };
+        });
+
+        dialog.Content = root;
 
         box.KeyDown += (_, e) =>
         {

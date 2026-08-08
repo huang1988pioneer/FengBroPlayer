@@ -63,6 +63,27 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
     </Style>
 
+    <!-- Dock pane tabs -->
+    <Style Selector="Button.dock-tab">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="Button.dock-tab:pointerover">
+        <Setter Property="Background" Value="{StaticResource BgHoverBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.dock-tab.active">
+        <Setter Property="Background" Value="{StaticResource BgSelectedBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <!-- Playlist list (virtualized) -->
     <Style Selector="ListBox.playlist">
         <Setter Property="Background" Value="Transparent" />

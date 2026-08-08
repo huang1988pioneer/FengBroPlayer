@@ -16,6 +16,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly MediaEngine _audio = new();
     private readonly MediaEngine _video = new();
+    private readonly RecentPlayStore _recent = new();
+    private readonly RecentStreamStore _streams = new();
     private bool _isSeeking;
     /// <summary>Ignore engine TimeChanged until this tick so scrub UI does not snap back (mp3/mp4).</summary>
     private long _suppressTimeChangedUntilTick;
@@ -41,6 +43,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public Func<Task<string?>>? PromptNetworkUrlAsync { get; set; }
 
     public ObservableCollection<MediaItem> Playlist { get; } = [];
+    public ObservableCollection<RecentPlayEntry> RecentItems => _recent.Items;
+    public ObservableCollection<RecentPlayEntry> RecentStreamItems => _streams.Items;
     public ObservableCollection<double> WaveformBars { get; } = [];
 
     /// <summary>Bound to LibVLC VideoView for real video rendering (Stage A uses video engine).</summary>
@@ -48,6 +52,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] public partial ChromeMode CurrentChrome { get; set; } = ChromeMode.Normal;
     [ObservableProperty] public partial bool IsPlaylistVisible { get; set; } = true;
+    [ObservableProperty] public partial SideDockPane ActiveDockPane { get; set; } = SideDockPane.Playlist;
     [ObservableProperty] public partial bool IsMenuBarVisible { get; set; } = true;
     [ObservableProperty] public partial bool IsControlBarVisible { get; set; } = true;
     [ObservableProperty] public partial bool IsStatusBarVisible { get; set; } = true;
@@ -71,11 +76,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty] public partial bool IsVideoStage { get; set; }
     [ObservableProperty] public partial bool IsAudioStage { get; set; }
     [ObservableProperty] public partial bool HasPlayableMedia { get; set; }
+    [ObservableProperty] public partial bool HasRecentItems { get; set; }
+    [ObservableProperty] public partial bool HasRecentStreamItems { get; set; }
+
+    public bool IsPlaylistDock => ActiveDockPane == SideDockPane.Playlist;
+    public bool IsRecentDock => ActiveDockPane == SideDockPane.Recent;
+    public bool IsStreamDock => ActiveDockPane == SideDockPane.Streams;
 
     public MainViewModel()
     {
         SeedWaveform();
         ApplyStageFlags(MediaKind.None);
+        _recent.Load();
+        _streams.Load();
+        HasRecentItems = RecentItems.Count > 0;
+        HasRecentStreamItems = RecentStreamItems.Count > 0;
+        RecentItems.CollectionChanged += (_, _) => HasRecentItems = RecentItems.Count > 0;
+        RecentStreamItems.CollectionChanged += (_, _) => HasRecentStreamItems = RecentStreamItems.Count > 0;
 
         _audio.Volume = (int)(Volume * 100);
         _video.Volume = (int)(Volume * 100);
@@ -86,6 +103,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _video.EndReached += () => OnEngineEndReached(MediaKind.Video);
         _audio.PlayingChanged += playing => OnEnginePlayingChanged(MediaKind.Audio, playing);
         _video.PlayingChanged += playing => OnEnginePlayingChanged(MediaKind.Video, playing);
+    }
+
+    partial void OnActiveDockPaneChanged(SideDockPane value)
+    {
+        OnPropertyChanged(nameof(IsPlaylistDock));
+        OnPropertyChanged(nameof(IsRecentDock));
+        OnPropertyChanged(nameof(IsStreamDock));
     }
 
     partial void OnActiveMediaKindChanged(MediaKind value) => ApplyStageFlags(value);
@@ -221,10 +245,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 _audio.SetRate((float)PlaybackRate);
                 IsPlaying = true;
                 StatusMessage = $"正在播放：{item.Title}";
+                RecordRecent(item);
             }
             else if (item.IsNetworkSource && item.SourceUrl is not null)
             {
                 PlayNetworkAudio(item.SourceUrl, item.Title);
+                if (IsPlaying)
+                    RecordRecent(item);
             }
             else
             {
@@ -239,10 +266,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             if (item.IsLocalFile && item.FilePath is not null)
             {
                 PlayLocalVideo(item.FilePath, item.Title);
+                RecordRecent(item);
             }
             else if (item.IsNetworkSource && item.SourceUrl is not null)
             {
                 PlayNetworkVideo(item.SourceUrl, item.Title);
+                RecordRecent(item);
             }
             else
             {
@@ -251,6 +280,132 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 StatusMessage = $"示範影片（無檔案）：{item.Title} — 請開啟本機影片";
             }
         }
+    }
+
+    private void RecordRecent(MediaItem item)
+    {
+        if (!item.IsPlayable) return;
+        _recent.Record(item);
+        if (item.IsNetworkSource)
+            _streams.Record(item);
+    }
+
+    [RelayCommand]
+    private void ShowPlaylistDock()
+    {
+        ActiveDockPane = SideDockPane.Playlist;
+        IsPlaylistVisible = true;
+    }
+
+    [RelayCommand]
+    private void ShowRecentDock()
+    {
+        ActiveDockPane = SideDockPane.Recent;
+        IsPlaylistVisible = true;
+        StatusMessage = RecentItems.Count > 0
+            ? $"最近播放：{RecentItems.Count} 筆"
+            : "尚無最近播放紀錄";
+    }
+
+    [RelayCommand]
+    private void ShowStreamDock()
+    {
+        ActiveDockPane = SideDockPane.Streams;
+        IsPlaylistVisible = true;
+        StatusMessage = RecentStreamItems.Count > 0
+            ? $"最近網路串流：{RecentStreamItems.Count} 筆"
+            : "尚無網路串流播放紀錄";
+    }
+
+    [RelayCommand]
+    private void PlayRecent(RecentPlayEntry? entry)
+    {
+        if (entry is null) return;
+
+        if (entry.IsLocalFile && entry.FilePath is not null && !File.Exists(entry.FilePath))
+        {
+            StatusMessage = $"檔案已不存在，已自最近播放移除：{entry.Title}";
+            _recent.Remove(entry);
+            return;
+        }
+
+        // Reuse existing playlist row when possible to keep queue continuity.
+        MediaItem? existing = null;
+        if (entry.FilePath is not null)
+        {
+            existing = Playlist.FirstOrDefault(m =>
+                string.Equals(m.FilePath, entry.FilePath, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (entry.SourceUrl is not null)
+        {
+            existing = Playlist.FirstOrDefault(m =>
+                string.Equals(m.SourceUrl, entry.SourceUrl, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (existing is not null)
+        {
+            SelectMedia(existing);
+            return;
+        }
+
+        var item = entry.ToMediaItem(Playlist.Count + 1);
+        Playlist.Insert(0, item);
+        ReindexPlaylist();
+        SelectMedia(item);
+    }
+
+    [RelayCommand]
+    private void PlayRecentStream(RecentPlayEntry? entry)
+    {
+        if (entry is null) return;
+        if (string.IsNullOrWhiteSpace(entry.SourceUrl))
+        {
+            StatusMessage = "此紀錄沒有有效網址";
+            return;
+        }
+
+        NetworkUrl = entry.SourceUrl;
+        PlayRecent(entry);
+    }
+
+    [RelayCommand]
+    private void RemoveRecent(RecentPlayEntry? entry)
+    {
+        if (entry is null) return;
+        _recent.Remove(entry);
+        StatusMessage = $"已自最近播放移除：{entry.Title}";
+    }
+
+    [RelayCommand]
+    private void RemoveRecentStream(RecentPlayEntry? entry)
+    {
+        if (entry is null) return;
+        _streams.Remove(entry);
+        StatusMessage = $"已自最近串流移除：{entry.Title}";
+    }
+
+    [RelayCommand]
+    private void ClearRecent()
+    {
+        if (RecentItems.Count == 0)
+        {
+            StatusMessage = "最近播放已是空的";
+            return;
+        }
+        _recent.Clear();
+        StatusMessage = "已清除最近播放紀錄";
+    }
+
+    [RelayCommand]
+    private void ClearRecentStreams()
+    {
+        if (RecentStreamItems.Count == 0)
+        {
+            StatusMessage = "最近網路串流已是空的";
+            return;
+        }
+        _streams.Clear();
+        StatusMessage = "已清除最近網路串流紀錄";
     }
 
     private void PlayLocalVideo(string path, string title)
@@ -644,6 +799,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 ? Uri.UnescapeDataString(Path.GetFileName(path))
                 : uri.Host;
 
+        // Always remember opened stream URLs (even if already in playlist).
+        _streams.RecordUrl(uri.AbsoluteUri, title, kind, format: string.IsNullOrEmpty(Path.GetExtension(path))
+            ? "URL"
+            : Path.GetExtension(path).TrimStart('.').ToUpperInvariant());
+
         var existing = Playlist.FirstOrDefault(m =>
             string.Equals(m.SourceUrl, uri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
@@ -696,6 +856,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void TogglePlaylist() => IsPlaylistVisible = !IsPlaylistVisible;
+
+    /// <summary>Dock clear button: clears the active pane (playlist / recent / streams).</summary>
+    [RelayCommand]
+    private void ClearDock()
+    {
+        switch (ActiveDockPane)
+        {
+            case SideDockPane.Recent:
+                ClearRecent();
+                break;
+            case SideDockPane.Streams:
+                ClearRecentStreams();
+                break;
+            default:
+                ClearPlaylist();
+                break;
+        }
+    }
 
     [RelayCommand]
     private void ToggleFullscreen()
