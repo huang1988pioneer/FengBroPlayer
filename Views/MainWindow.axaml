@@ -223,7 +223,7 @@
                                 Classes="ghost"
                                 Content="清除"
                                 Command="{Binding ClearPlaylistCommand}"
-                                ToolTip.Tip="清除全部（含示範列）" />
+                                ToolTip.Tip="清除播放清單" />
                     </Grid>
 
                     <ScrollViewer Grid.Row="1" Margin="4,0,4,8">
