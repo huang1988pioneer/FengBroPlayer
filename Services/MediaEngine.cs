@@ -175,26 +175,36 @@ public sealed class MediaEngine : IDisposable
 
     public bool IsSeekable => Player.IsSeekable;
 
-    /// <summary>Jump to a 0–1 position. Uses Position first (works when Length is still 0).</summary>
+    /// <summary>
+    /// Jump to a 0–1 position. Prefer fractional Position (reliable for local MP4),
+    /// then absolute Time when length is known.
+    /// </summary>
     public void SeekRatio(double ratio)
     {
         ratio = Math.Clamp(ratio, 0, 1);
+        var pos = (float)ratio;
 
-        // Prefer absolute time when duration is known (more precise for long files).
-        if (Player.Length > 0)
-        {
-            Player.Time = (long)(Player.Length * ratio);
-            return;
-        }
-
-        // Fallback: fractional position (LibVLC 0.0–1.0).
         try
         {
-            Player.Position = (float)ratio;
+            // Position is the primary seek path for container formats (mp4/mkv/…).
+            Player.Position = pos;
         }
         catch
         {
-            // Some states reject Position; ignore.
+            // Some states reject Position; fall through to Time.
+        }
+
+        // Reinforce with absolute time when duration is known (helps long files / edge demuxers).
+        if (Player.Length > 0)
+        {
+            try
+            {
+                Player.Time = (long)(Player.Length * ratio);
+            }
+            catch
+            {
+                // Ignore; Position above may have already applied.
+            }
         }
     }
 
@@ -209,8 +219,8 @@ public sealed class MediaEngine : IDisposable
             return;
         }
 
-        var next = Player.Time + (long)(seconds * 1000);
-        Player.Time = Math.Clamp(next, 0, Player.Length);
+        var next = Math.Clamp(Player.Time + (long)(seconds * 1000), 0, Player.Length);
+        SeekRatio((double)next / Player.Length);
     }
 
     public double GetProgressRatio()

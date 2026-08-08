@@ -108,10 +108,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnProgressChanged(double value)
     {
+        // While scrubbing, only refresh the time label. Actual LibVLC seek runs in EndSeek
+        // so video demuxers (e.g. MP4) are not thrashed by intermediate Position writes.
         if (!_isSeeking || CurrentMedia?.IsPlayable != true)
             return;
 
-        ActiveEngine?.SeekRatio(value);
         UpdatePositionLabel(value);
     }
 

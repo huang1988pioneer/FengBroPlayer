@@ -338,9 +338,6 @@
                                 Value="{Binding Progress, Mode=TwoWay}"
                                 IsEnabled="{Binding HasPlayableMedia}"
                                 ToolTip.Tip="拖曳或點擊時間軸跳轉"
-                                PointerPressed="OnSeekStart"
-                                PointerReleased="OnSeekEnd"
-                                PointerCaptureLost="OnSeekCaptureLost"
                                 KeyUp="OnSeekKeyUp" />
                         <TextBlock Grid.Column="2"
                                    Text="{Binding DurationText}"

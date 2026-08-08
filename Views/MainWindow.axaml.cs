@@ -48,6 +48,13 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
 
+        // Slider marks pointer events Handled on the thumb/track; XAML handlers miss them
+        // unless we subscribe with handledEventsToo. Without BeginSeek, Progress snaps back
+        // on TimeChanged and LibVLC never receives the seek (noticeable on .mp4).
+        SeekSlider.AddHandler(PointerPressedEvent, OnSeekStart, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SeekSlider.AddHandler(PointerReleasedEvent, OnSeekEnd, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SeekSlider.AddHandler(PointerCaptureLostEvent, OnSeekCaptureLost, RoutingStrategies.Bubble, handledEventsToo: true);
+
         _fsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         _fsHideTimer.Tick += OnFullscreenHideTick;
     }
