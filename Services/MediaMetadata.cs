@@ -73,7 +73,11 @@ public static class MediaMetadata
         string Channel,
         string Duration,
         string Format,
-        TimeSpan Length);
+        TimeSpan Length,
+        int Width = 0,
+        int Height = 0,
+        string VideoCodec = "",
+        string AudioCodec = "");
 
     public static AudioInfo ReadAudio(string path)
     {
@@ -198,12 +202,19 @@ public static class MediaMetadata
             using var file = TagLib.File.Create(path);
             var title = string.IsNullOrWhiteSpace(file.Tag.Title) ? name : file.Tag.Title;
             var length = file.Properties.Duration;
+            var codecs = file.Properties.Codecs.ToArray();
+            var videoCodec = codecs.FirstOrDefault(c => (c.MediaTypes & TagLib.MediaTypes.Video) != 0)?.Description ?? "";
+            var audioCodec = codecs.FirstOrDefault(c => (c.MediaTypes & TagLib.MediaTypes.Audio) != 0)?.Description ?? "";
             return new VideoInfo(
                 title,
                 "本機影片",
                 FormatDuration(length),
                 string.IsNullOrEmpty(ext) ? "VIDEO" : ext,
-                length);
+                length,
+                file.Properties.VideoWidth,
+                file.Properties.VideoHeight,
+                videoCodec,
+                audioCodec);
         }
         catch
         {

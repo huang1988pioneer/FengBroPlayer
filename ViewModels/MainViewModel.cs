@@ -1246,7 +1246,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     Kind = MediaKind.Video,
                     FilePath = path,
                     CoverHue = MediaMetadata.HueFromPath(path),
-                    Format = info.Format
+                    Format = info.Format,
+                    VideoWidth = info.Width,
+                    VideoHeight = info.Height,
+                    VideoCodec = info.VideoCodec,
+                    AudioCodec = info.AudioCodec
                 };
             }
             else if (MediaMetadata.IsAudio(path))
@@ -1452,13 +1456,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         var item = CurrentMedia;
         var source = item.SourceUrl ?? item.FilePath ?? "";
-        var details = string.Join(" · ", new[] { item.Format, item.Bitrate }
+        var resolution = item.VideoWidth > 0 && item.VideoHeight > 0
+            ? $"{item.VideoWidth}×{item.VideoHeight} ({item.VideoHeight}P)"
+            : "";
+        var videoDetails = string.Join(" · ", new[] { item.VideoCodec, item.Format, resolution }
             .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var audioDetails = string.IsNullOrWhiteSpace(item.AudioCodec)
+            ? ""
+            : $"音訊：{item.AudioCodec}";
+        var subtitle = HasSubtitle
+            ? $"字幕：已載入 {Path.GetFileName(SubtitlePath)}"
+            : "字幕：未載入";
         var text = string.Join("\n", new[]
         {
             item.Title,
             item.Subtitle,
-            details,
+            videoDetails,
+            audioDetails,
+            subtitle,
             $"{PositionText} / {DurationText}",
             source
         }.Where(value => !string.IsNullOrWhiteSpace(value)));

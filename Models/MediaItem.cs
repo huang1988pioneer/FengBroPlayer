@@ -32,6 +32,8 @@ public partial class MediaItem : ObservableObject
     public string Bitrate { get; init; } = "";
     public int VideoWidth { get; init; }
     public int VideoHeight { get; init; }
+    public string VideoCodec { get; init; } = "";
+    public string AudioCodec { get; init; } = "";
 
     public bool IsLocalFile => !string.IsNullOrWhiteSpace(FilePath);
     public bool IsNetworkSource => !string.IsNullOrWhiteSpace(SourceUrl);
