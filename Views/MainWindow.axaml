@@ -358,6 +358,14 @@
                              Background="Transparent"
                              BorderThickness="0"
                              Padding="0">
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="新增檔案…"
+                                          Command="{Binding OpenMediaCommand}" />
+                                <MenuItem Header="新增網路串流…"
+                                          Command="{Binding OpenNetworkUrlCommand}" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaItem">
                                 <Button Classes="playlist-row"
