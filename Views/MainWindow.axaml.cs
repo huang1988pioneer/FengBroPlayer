@@ -41,6 +41,12 @@ public partial class MainWindow : Window
         Patterns = MediaMetadata.SubtitleExtensions.Select(e => $"*{e}").ToArray()
     };
 
+    private static readonly FilePickerFileType LyricsType = new("LRC Lyrics")
+    {
+        Patterns = ["*.lrc"],
+        MimeTypes = ["text/plain"]
+    };
+
     private readonly DispatcherTimer _fsHideTimer;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
     private bool _applyingWindowState;
@@ -80,6 +86,7 @@ public partial class MainWindow : Window
         vm.SetTopmost = top => Topmost = top;
         vm.PromptNetworkUrlAsync = PromptNetworkUrlAsync;
         vm.PickSubtitleAsync = PickSubtitleFileAsync;
+        vm.PickLyricsAsync = PickLyricsFileAsync;
         vm.PropertyChanged += OnViewModelPropertyChanged;
 
         // Keep video HWND mounted for the whole session (overlay UI for audio/idle).
@@ -242,6 +249,17 @@ public partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(options);
         if (files.Count == 0) return null;
         return files[0].TryGetLocalPath();
+    }
+
+    private async Task<string?> PickLyricsFileAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            AllowMultiple = false,
+            Title = "選擇 LRC 動態歌詞",
+            FileTypeFilter = [LyricsType, FilePickerFileTypes.All]
+        });
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
     private async Task<string?> PromptNetworkUrlAsync()

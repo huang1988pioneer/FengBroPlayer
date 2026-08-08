@@ -56,6 +56,11 @@
                 <MenuItem Header="關閉字幕"
                           Command="{Binding ClearSubtitleCommand}"
                           IsEnabled="{Binding HasSubtitle}" />
+                <MenuItem Header="Load dynamic lyrics (.lrc)"
+                          Command="{Binding OpenLyricsCommand}" />
+                <MenuItem Header="Hide dynamic lyrics"
+                          Command="{Binding ClearLyricsCommand}"
+                          IsEnabled="{Binding HasLyrics}" />
                 <Separator />
                 <MenuItem Header="最近播放"
                           Command="{Binding ShowRecentDockCommand}" />
@@ -185,6 +190,17 @@
                             <TextBlock Text="{Binding CurrentMedia.Subtitle, FallbackValue='開啟檔案或拖放媒體到視窗'}"
                                        FontSize="13"
                                        Foreground="{StaticResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextAlignment="Center" />
+
+                            <TextBlock Text="{Binding CurrentLyricText}"
+                                       IsVisible="{Binding HasLyrics}"
+                                       MaxWidth="560"
+                                       Margin="0,10,0,0"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
                                        HorizontalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"
                                        TextAlignment="Center" />
@@ -589,6 +605,11 @@
                                 Content="⛶"
                                 ToolTip.Tip="全螢幕 (F)"
                                 Command="{Binding ToggleFullscreenCommand}" />
+                        <Button Classes="transport"
+                                ToolTip.Tip="Load dynamic lyrics (.lrc)"
+                                Command="{Binding OpenLyricsCommand}">
+                            <TextBlock Text="LRC" FontSize="10" FontWeight="Bold" />
+                        </Button>
                         <!-- Subtitle button: visible only in video mode -->
                         <Button Classes="transport"
                                 IsVisible="{Binding IsVideoStage}"

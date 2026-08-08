@@ -47,6 +47,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     /// <summary>Set by the view to pick a subtitle file via native file picker.</summary>
     public Func<Task<string?>>? PickSubtitleAsync { get; set; }
+    public Func<Task<string?>>? PickLyricsAsync { get; set; }
 
     public ObservableCollection<MediaItem> Playlist { get; } = [];
     public ObservableCollection<RecentPlayEntry> RecentItems => _recent.Items;
@@ -88,6 +89,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     /// <summary>Path of the currently loaded external subtitle file (empty = none).</summary>
     [ObservableProperty] public partial string SubtitlePath { get; set; } = string.Empty;
     [ObservableProperty] public partial bool HasSubtitle { get; set; }
+    public ObservableCollection<LrcLine> Lyrics { get; } = [];
+    [ObservableProperty] public partial string LyricsPath { get; set; } = string.Empty;
+    [ObservableProperty] public partial bool HasLyrics { get; set; }
+    [ObservableProperty] public partial string CurrentLyricText { get; set; } = string.Empty;
 
     /// <summary>Decoded album art for the current audio track (shown on audio stage).</summary>
     [ObservableProperty] public partial Bitmap? CurrentCoverImage { get; set; }
@@ -235,12 +240,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     .Where(s => !string.IsNullOrWhiteSpace(s)));
             EnsureCoverArt(item);
             UpdateCurrentCoverImage(item);
+            LoadLyricsForItem(item);
         }
         else
         {
             WindowTitle = "多媒體播放器";
             StatusDetail = "";
             ClearCurrentCoverImage();
+            ClearLyrics();
         }
     }
 
@@ -977,6 +984,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsPlaying = false;
         Progress = 0;
         PositionText = "00:00";
+        UpdateCurrentLyric(0);
         StatusMessage = CurrentMedia is null ? "已停止" : $"已停止：{CurrentMedia.Title}";
     }
 
@@ -1124,6 +1132,70 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         HasSubtitle = false;
         _video.ClearSubtitles();
         StatusMessage = "已關閉字幕";
+    }
+
+    [RelayCommand]
+    private async Task OpenLyricsAsync()
+    {
+        if (PickLyricsAsync is null)
+        {
+            StatusMessage = "歌詞檔案對話框尚未就緒";
+            return;
+        }
+        var path = await PickLyricsAsync();
+        if (!string.IsNullOrWhiteSpace(path)) LoadLyrics(path, announce: true);
+    }
+
+    [RelayCommand]
+    private void ClearLyrics()
+    {
+        Lyrics.Clear();
+        LyricsPath = string.Empty;
+        CurrentLyricText = string.Empty;
+        HasLyrics = false;
+    }
+
+    private void LoadLyricsForItem(MediaItem item)
+    {
+        ClearLyrics();
+        if (!item.IsLocalFile || string.IsNullOrWhiteSpace(item.FilePath)) return;
+        var sidecar = LrcParser.FindSidecar(item.FilePath);
+        if (sidecar is not null) LoadLyrics(sidecar, announce: false);
+    }
+
+    private void LoadLyrics(string path, bool announce)
+    {
+        try
+        {
+            var parsed = LrcParser.Load(path);
+            Lyrics.Clear();
+            foreach (var line in parsed) Lyrics.Add(line);
+            LyricsPath = path;
+            HasLyrics = Lyrics.Count > 0;
+            UpdateCurrentLyric(ActiveEngine?.Player.Time ?? 0);
+            if (announce)
+                StatusMessage = HasLyrics ? $"已載入動態歌詞：{Path.GetFileName(path)}" : "此 LRC 檔沒有可辨識的時間標記";
+        }
+        catch
+        {
+            ClearLyrics();
+            if (announce) StatusMessage = "無法讀取 LRC 歌詞檔";
+        }
+    }
+
+    private void UpdateCurrentLyric(long timeMs)
+    {
+        if (Lyrics.Count == 0) { CurrentLyricText = string.Empty; return; }
+        var low = 0;
+        var high = Lyrics.Count - 1;
+        var current = -1;
+        while (low <= high)
+        {
+            var mid = low + (high - low) / 2;
+            if (Lyrics[mid].TimeMs <= timeMs) { current = mid; low = mid + 1; }
+            else high = mid - 1;
+        }
+        CurrentLyricText = current >= 0 ? Lyrics[current].Text : string.Empty;
     }
 
     public void ImportDroppedPaths(IEnumerable<string> paths)
@@ -1462,6 +1534,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (lengthMs > 0)
             DurationText = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(lengthMs));
         PositionText = MediaMetadata.FormatDuration(TimeSpan.FromMilliseconds(timeMs));
+        UpdateCurrentLyric(timeMs);
     }
 
     private void OnEngineEndReached(MediaKind kind)

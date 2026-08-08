@@ -125,11 +125,13 @@ public static class StreamResolver
             return null;
 
         // Prefer progressive HTTPS MP4 for LibVLC (single file, no HLS/DASH glue).
+        // Bilibili normally serves DASH: its best video stream has no audio.
+        // Request an explicit video+audio pair before trying progressive fallbacks.
         var formatCandidates = new[]
         {
+            "bv*+ba/b",
             "best[ext=mp4][protocol^=http][protocol!*=m3u8]/best[ext=mp4][protocol^=http]/18/22/best[ext=mp4]/b",
             "b/best",
-            "bv*+ba/b",
         };
 
         foreach (var format in formatCandidates)
@@ -145,8 +147,7 @@ public static class StreamResolver
                 ],
                 cancellationToken).ConfigureAwait(false);
 
-            var parsed = ParseYtDlpJson(json, pageUri, preferSingleUrl: format.Contains("18/22", StringComparison.Ordinal)
-                || format.Contains("ext=mp4", StringComparison.Ordinal));
+            var parsed = ParseYtDlpJson(json, pageUri, preferSingleUrl: format != "bv*+ba/b");
             if (parsed is null)
                 continue;
             if (string.Equals(parsed.PrimaryUrl, pageUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
@@ -220,26 +221,33 @@ public static class StreamResolver
                     Uploader: uploader);
             }
 
+            // yt-dlp emits a top-level URL even for a DASH video component. Read
+            // requested_formats first so that Bilibili's audio URL is retained.
+            if (!preferSingleUrl
+                && root.TryGetProperty("requested_formats", out var requested)
+                && requested.ValueKind == JsonValueKind.Array
+                && requested.GetArrayLength() >= 2)
+            {
+                string? videoUrl = null;
+                string? audioUrl = null;
+                foreach (var format in requested.EnumerateArray())
+                {
+                    var url = GetString(format, "url");
+                    if (string.IsNullOrWhiteSpace(url)) continue;
+                    if (GetString(format, "acodec") is not "none" && GetString(format, "vcodec") is "none")
+                        audioUrl ??= url;
+                    else if (GetString(format, "vcodec") is not "none")
+                        videoUrl ??= url;
+                }
+                if (!string.IsNullOrWhiteSpace(videoUrl))
+                    return new ResolvedStream(pageUri.AbsoluteUri, title, videoUrl, audioUrl, false, duration, uploader);
+            }
+
             // Single progressive / merged format: top-level "url"
             var singleUrl = GetString(root, "url");
             if (!string.IsNullOrWhiteSpace(singleUrl)
                 && (preferSingleUrl || !root.TryGetProperty("requested_formats", out _)))
             {
-                // If requested_formats exists and has 2 items, prefer those for DASH.
-                if (!preferSingleUrl
-                    && root.TryGetProperty("requested_formats", out var rf0)
-                    && rf0.ValueKind == JsonValueKind.Array
-                    && rf0.GetArrayLength() >= 2)
-                {
-                    var v0 = GetString(rf0[0], "url");
-                    var a0 = GetString(rf0[1], "url");
-                    if (!string.IsNullOrWhiteSpace(v0))
-                    {
-                        return new ResolvedStream(
-                            pageUri.AbsoluteUri, title, v0!, a0, false, duration, uploader);
-                    }
-                }
-
                 return new ResolvedStream(
                     pageUri.AbsoluteUri, title, singleUrl!, null, false, duration, uploader);
             }
