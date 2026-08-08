@@ -63,6 +63,33 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
     </Style>
 
+    <!-- Playlist list (virtualized) -->
+    <Style Selector="ListBox.playlist">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.playlist ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.playlist ListBoxItem:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.playlist ListBoxItem:selected">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.playlist ListBoxItem:selected:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.playlist ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <!-- Playlist dense row -->
     <Style Selector="Button.playlist-row">
         <Setter Property="Background" Value="Transparent" />

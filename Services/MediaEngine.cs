@@ -91,6 +91,18 @@ public sealed class MediaEngine : IDisposable
 
     public bool IsPlaying => Player.IsPlaying;
 
+    /// <summary>
+    /// True when the player is opening, buffering, playing, or paused (Stop would do real work).
+    /// </summary>
+    public bool IsActive
+    {
+        get
+        {
+            var s = Player.State;
+            return s is VLCState.Opening or VLCState.Buffering or VLCState.Playing or VLCState.Paused;
+        }
+    }
+
     public long Length => Player.Length;
     public long Time
     {
@@ -140,9 +152,13 @@ public sealed class MediaEngine : IDisposable
         if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
             return false;
 
-        _currentMedia?.Dispose();
-        _currentMedia = new Media(_libVlc, path, FromType.FromPath);
-        return Player.Play(_currentMedia);
+        // Swap media without an explicit Stop — faster for playlist skip (mp3/mp4).
+        var next = new Media(_libVlc, path, FromType.FromPath);
+        var previous = _currentMedia;
+        _currentMedia = next;
+        var ok = Player.Play(next);
+        DisposeMediaDeferred(previous);
+        return ok;
     }
 
     /// <summary>Starts a HTTP(S) media source, including services LibVLC can resolve.</summary>
@@ -155,9 +171,12 @@ public sealed class MediaEngine : IDisposable
         if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
             return false;
 
-        _currentMedia?.Dispose();
-        _currentMedia = new Media(_libVlc, uri.AbsoluteUri, FromType.FromLocation);
-        return Player.Play(_currentMedia);
+        var next = new Media(_libVlc, uri.AbsoluteUri, FromType.FromLocation);
+        var previous = _currentMedia;
+        _currentMedia = next;
+        var ok = Player.Play(next);
+        DisposeMediaDeferred(previous);
+        return ok;
     }
 
     public bool HasVideoHost => Player.Hwnd != IntPtr.Zero;
@@ -165,6 +184,33 @@ public sealed class MediaEngine : IDisposable
     public void Pause() => Player.Pause();
 
     public void Stop() => Player.Stop();
+
+    /// <summary>Skip no-op Stop when already idle — Stop() can stall the UI thread.</summary>
+    public void StopIfActive()
+    {
+        if (!IsActive)
+            return;
+        try
+        {
+            Player.Stop();
+        }
+        catch
+        {
+            // Ignore stop failures during rapid track changes.
+        }
+    }
+
+    private static void DisposeMediaDeferred(Media? media)
+    {
+        if (media is null)
+            return;
+        // Dispose after the player has taken the new media; avoid blocking track switch.
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { media.Dispose(); }
+            catch { /* ignore */ }
+        }, DispatcherPriority.Background);
+    }
 
     public void TogglePause()
     {

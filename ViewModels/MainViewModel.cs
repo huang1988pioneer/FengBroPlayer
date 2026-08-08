@@ -176,10 +176,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private void MarkCurrent(MediaItem? item)
     {
-        foreach (var m in Playlist)
-            m.IsCurrent = false;
+        // Only touch previous + new row — full-list IsCurrent resets freeze large playlists.
+        var previous = CurrentMedia;
+        if (previous is not null && !ReferenceEquals(previous, item) && previous.IsCurrent)
+            previous.IsCurrent = false;
+
         if (item is not null)
             item.IsCurrent = true;
+
         CurrentMedia = item;
         HasPlayableMedia = item?.IsPlayable == true;
         if (item is not null)
@@ -209,7 +213,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (item.Kind == MediaKind.Audio)
         {
-            _video.Stop();
+            // Avoid Stop on idle video engine — Stop() stalls UI during rapid playlist clicks.
+            _video.StopIfActive();
             if (item.IsLocalFile && item.FilePath is not null)
             {
                 _audio.Play(item.FilePath);
@@ -219,14 +224,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                _audio.Stop();
+                _audio.StopIfActive();
                 IsPlaying = true; // demo visual
                 StatusMessage = $"示範曲目（無檔案）：{item.Title} — 請開啟本機音樂";
             }
         }
         else if (item.Kind == MediaKind.Video)
         {
-            _audio.Stop();
+            _audio.StopIfActive();
             if (item.IsLocalFile && item.FilePath is not null)
             {
                 PlayLocalVideo(item.FilePath, item.Title);
@@ -237,7 +242,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                _video.Stop();
+                _video.StopIfActive();
                 IsPlaying = false;
                 StatusMessage = $"示範影片（無檔案）：{item.Title} — 請開啟本機影片";
             }
@@ -351,8 +356,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void StopMedia()
     {
-        _audio.Stop();
-        _video.Stop();
+        _audio.StopIfActive();
+        _video.StopIfActive();
         IsPlaying = false;
         Progress = 0;
         PositionText = "00:00";
@@ -363,7 +368,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void PlayPrevious()
     {
         if (Playlist.Count == 0) return;
-        var from = CurrentMedia is null ? 0 : Playlist.ToList().FindIndex(m => ReferenceEquals(m, CurrentMedia));
+        var from = IndexOfCurrent();
         if (from < 0) from = 0;
         var prev = FindPlayable(from, direction: -1);
         if (prev is null)
@@ -379,7 +384,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void PlayNext()
     {
         if (Playlist.Count == 0) return;
-        var from = CurrentMedia is null ? -1 : Playlist.ToList().FindIndex(m => ReferenceEquals(m, CurrentMedia));
+        var from = IndexOfCurrent();
         var next = FindPlayable(from, direction: 1);
         if (next is null)
         {
@@ -388,6 +393,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
         SelectMedia(next);
+    }
+
+    private int IndexOfCurrent()
+    {
+        if (CurrentMedia is null) return -1;
+        for (var i = 0; i < Playlist.Count; i++)
+        {
+            if (ReferenceEquals(Playlist[i], CurrentMedia))
+                return i;
+        }
+        return -1;
     }
 
     /// <summary>
@@ -585,8 +601,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ClearPlaylist()
     {
-        _audio.Stop();
-        _video.Stop();
+        _audio.StopIfActive();
+        _video.StopIfActive();
         Playlist.Clear();
         CurrentMedia = null;
         ActiveMediaKind = MediaKind.None;

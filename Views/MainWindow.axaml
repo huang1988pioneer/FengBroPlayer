@@ -226,52 +226,60 @@
                                 ToolTip.Tip="清除播放清單" />
                     </Grid>
 
-                    <ScrollViewer Grid.Row="1" Margin="4,0,4,8">
-                        <ItemsControl ItemsSource="{Binding Playlist}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:MediaItem">
-                                    <Button Classes="playlist-row"
-                                            Classes.current="{Binding IsCurrent}"
-                                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectMediaCommand}"
-                                            CommandParameter="{Binding}"
-                                            Margin="0,1">
-                                        <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding Index}"
+                    <!-- ListBox virtualizes rows; ItemsControl+ScrollViewer realized every item. -->
+                    <ListBox Grid.Row="1"
+                             Margin="4,0,4,8"
+                             Classes="playlist"
+                             ItemsSource="{Binding Playlist}"
+                             SelectedItem="{Binding CurrentMedia, Mode=OneWay}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:MediaItem">
+                                <Button Classes="playlist-row"
+                                        Classes.current="{Binding IsCurrent}"
+                                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectMediaCommand}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,1"
+                                        HorizontalAlignment="Stretch">
+                                    <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding Index}"
+                                                   Classes="muted"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center"
+                                                   IsVisible="{Binding !IsCurrent}" />
+                                        <TextBlock Grid.Column="0"
+                                                   Text="▶"
+                                                   Foreground="{StaticResource AccentGlowBrush}"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center"
+                                                   IsVisible="{Binding IsCurrent}" />
+                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Subtitle}"
                                                        Classes="muted"
-                                                       FontSize="12"
-                                                       VerticalAlignment="Center"
-                                                       HorizontalAlignment="Center"
-                                                       IsVisible="{Binding !IsCurrent}" />
-                                            <TextBlock Grid.Column="0"
-                                                       Text="▶"
-                                                       Foreground="{StaticResource AccentGlowBrush}"
                                                        FontSize="11"
-                                                       VerticalAlignment="Center"
-                                                       HorizontalAlignment="Center"
-                                                       IsVisible="{Binding IsCurrent}" />
-                                            <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="13"
-                                                           Foreground="{StaticResource TextPrimaryBrush}"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding Subtitle}"
-                                                           Classes="muted"
-                                                           FontSize="11"
-                                                           TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Duration}"
-                                                       Classes="muted"
-                                                       FontSize="11.5"
-                                                       VerticalAlignment="Center"
-                                                       FontFeatures="tnum" />
-                                        </Grid>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Duration}"
+                                                   Classes="muted"
+                                                   FontSize="11.5"
+                                                   VerticalAlignment="Center"
+                                                   FontFeatures="tnum" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </Border>
         </Grid>
