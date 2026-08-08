@@ -361,9 +361,9 @@
                         <ListBox.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="新增檔案…"
-                                          Command="{Binding OpenMediaCommand}" />
+                                          Command="{Binding QueueMediaCommand}" />
                                 <MenuItem Header="新增網路串流…"
-                                          Command="{Binding OpenNetworkUrlCommand}" />
+                                          Command="{Binding QueueNetworkUrlCommand}" />
                             </ContextMenu>
                         </ListBox.ContextMenu>
                         <ListBox.ItemTemplate>

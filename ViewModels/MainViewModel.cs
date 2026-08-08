@@ -1072,6 +1072,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task QueueMediaAsync()
+    {
+        if (PickFilesAsync is null)
+        {
+            StatusMessage = "檔案對話框尚未就緒";
+            return;
+        }
+
+        var paths = await PickFilesAsync("media");
+        if (paths.Count > 0)
+            ImportPaths(paths, selectFirst: false);
+    }
+
+    [RelayCommand]
     private async Task OpenMusicAsync()
     {
         if (PickFilesAsync is null)
@@ -1214,7 +1228,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ImportPaths(list);
     }
 
-    private void ImportPaths(IReadOnlyList<string> paths)
+    private void ImportPaths(IReadOnlyList<string> paths, bool selectFirst = true)
     {
         MediaItem? firstNewPlayable = null;
         var added = 0;
@@ -1295,13 +1309,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         ReindexPlaylist();
 
-        if (firstNewPlayable is not null)
+        if (firstNewPlayable is not null && selectFirst)
         {
             // New items were added — select the first new playable item.
             StatusMessage = $"已加入 {added} 個媒體檔案";
             SelectMedia(firstNewPlayable);
         }
-        else if (added == 0 && firstExisting is not null)
+        else if (!selectFirst && added > 0)
+        {
+            StatusMessage = $"已加入 {added} 個項目，等待播放";
+        }
+        else if (added == 0 && firstExisting is not null && selectFirst)
         {
             // All selected paths already exist in the playlist.
             // Select and play the first matching item so the user can switch media type.
@@ -1320,7 +1338,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private async Task OpenNetworkUrlAsync()
+    private Task OpenNetworkUrlAsync() => AddNetworkUrlAsync(playImmediately: true);
+
+    [RelayCommand]
+    private Task QueueNetworkUrlAsync() => AddNetworkUrlAsync(playImmediately: false);
+
+    private async Task AddNetworkUrlAsync(bool playImmediately)
     {
         string? url = null;
         if (PromptNetworkUrlAsync is not null)
@@ -1362,7 +1385,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             string.Equals(m.SourceUrl, uri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
-            SelectMedia(existing);
+            if (playImmediately)
+                SelectMedia(existing);
+            else
+                StatusMessage = "串流已在播放清單中";
             return;
         }
 
@@ -1378,9 +1404,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             CoverHue = kind == MediaKind.Audio ? "210" : "195",
             Format = string.IsNullOrEmpty(ext) ? "URL" : ext.TrimStart('.').ToUpperInvariant()
         };
-        Playlist.Insert(0, item);
+        if (playImmediately)
+            Playlist.Insert(0, item);
+        else
+            Playlist.Add(item);
         ReindexPlaylist();
-        SelectMedia(item);
+        if (playImmediately)
+            SelectMedia(item);
+        else
+            StatusMessage = "串流已加入播放清單，等待播放";
     }
 
     private static bool LooksLikeStreamPlaylist(string path)
