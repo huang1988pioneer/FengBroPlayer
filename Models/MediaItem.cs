@@ -21,6 +21,11 @@ public partial class MediaItem : ObservableObject
     public string? SourceUrl { get; init; }
     public string CoverHue { get; init; } = "200";
 
+    /// <summary>Embedded or sidecar album art (JPEG/PNG bytes). Not persisted to recent JSON.</summary>
+    public byte[]? CoverArtBytes { get; set; }
+
+    public bool HasCoverArt => CoverArtBytes is { Length: > 0 };
+
     [ObservableProperty]
     public partial string Format { get; set; } = "";
 

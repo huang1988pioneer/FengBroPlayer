@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LibVLCSharp.Shared;
@@ -80,6 +81,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty] public partial bool HasPlayableMedia { get; set; }
     [ObservableProperty] public partial bool HasRecentItems { get; set; }
     [ObservableProperty] public partial bool HasRecentStreamItems { get; set; }
+
+    /// <summary>Decoded album art for the current audio track (shown on audio stage).</summary>
+    [ObservableProperty] public partial Bitmap? CurrentCoverImage { get; set; }
+    [ObservableProperty] public partial bool HasCurrentCoverImage { get; set; }
 
     public bool IsPlaylistDock => ActiveDockPane == SideDockPane.Playlist;
     public bool IsRecentDock => ActiveDockPane == SideDockPane.Recent;
@@ -221,12 +226,69 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             StatusDetail = string.Join(" · ",
                 new[] { item.Format, item.Bitrate, item.Kind == MediaKind.Video ? "影片" : "音樂" }
                     .Where(s => !string.IsNullOrWhiteSpace(s)));
+            EnsureCoverArt(item);
+            UpdateCurrentCoverImage(item);
         }
         else
         {
             WindowTitle = "多媒體播放器";
             StatusDetail = "";
+            ClearCurrentCoverImage();
         }
+    }
+
+    /// <summary>Load embedded/sidecar cover into <see cref="MediaItem.CoverArtBytes"/> if missing.</summary>
+    private static void EnsureCoverArt(MediaItem item)
+    {
+        if (item.CoverArtBytes is { Length: > 0 })
+            return;
+        if (item.Kind != MediaKind.Audio || string.IsNullOrWhiteSpace(item.FilePath))
+            return;
+        try
+        {
+            item.CoverArtBytes = MediaMetadata.LoadCoverArtBytes(item.FilePath);
+        }
+        catch
+        {
+            // ignore cover load failures
+        }
+    }
+
+    private void UpdateCurrentCoverImage(MediaItem? item)
+    {
+        ClearCurrentCoverImage();
+        if (item?.CoverArtBytes is not { Length: > 64 } bytes)
+            return;
+
+        try
+        {
+            using var ms = new MemoryStream(bytes);
+            var bmp = new Bitmap(ms);
+            // Reject tiny / empty placeholders that decode as a white plate.
+            if (bmp.PixelSize.Width < 24 || bmp.PixelSize.Height < 24)
+            {
+                bmp.Dispose();
+                item.CoverArtBytes = null;
+                return;
+            }
+
+            CurrentCoverImage = bmp;
+            HasCurrentCoverImage = true;
+        }
+        catch
+        {
+            item.CoverArtBytes = null;
+            ClearCurrentCoverImage();
+        }
+    }
+
+    private void ClearCurrentCoverImage()
+    {
+        var old = CurrentCoverImage;
+        CurrentCoverImage = null;
+        HasCurrentCoverImage = false;
+        try { old?.Dispose(); }
+        catch { /* ignore */ }
     }
 
     [RelayCommand]
@@ -250,13 +312,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private void SelectMediaCore(MediaItem item, int generation)
     {
-        var previousKind = ActiveMediaKind;
         var nextKind = item.Kind == MediaKind.None ? MediaKind.None : item.Kind;
 
-        // CRITICAL: stop video and detach HWND *before* stage row collapses (Height=0 destroys
-        // the native host). Clearing Hwnd while still Playing is a common hard freeze on Windows.
-        if (previousKind == MediaKind.Video && nextKind != MediaKind.Video)
-            _video.PrepareForHostTeardown();
+        // Soft hand-off only — never Stop() or destroy HWND when switching files.
+        // Video host stays mounted under the audio overlay for the whole session.
+        if (nextKind == MediaKind.Audio)
+            _video.YieldForOtherEngine();
+        else if (nextKind == MediaKind.Video)
+            _audio.YieldForOtherEngine();
 
         MarkCurrent(item);
         ActiveMediaKind = nextKind;
@@ -265,8 +328,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (nextKind == MediaKind.Audio)
         {
-            _video.YieldForOtherEngine();
-            // Restore audio engine volume (may have been muted if we previously yielded it).
             _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
 
             if (item.IsLocalFile && item.FilePath is not null)
@@ -285,14 +346,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                _audio.StopIfActive();
+                _audio.YieldForOtherEngine();
                 IsPlaying = true; // demo visual
                 StatusMessage = $"示範曲目（無檔案）：{item.Title} — 請開啟本機音樂";
             }
         }
         else if (nextKind == MediaKind.Video)
         {
-            _audio.YieldForOtherEngine();
             _video.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
 
             if (item.IsLocalFile && item.FilePath is not null)
@@ -307,7 +367,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                _video.StopIfActive();
+                _video.YieldForOtherEngine();
                 IsPlaying = false;
                 StatusMessage = $"示範影片（無檔案）：{item.Title} — 請開啟本機影片";
             }
@@ -992,11 +1052,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         MediaItem? firstNewPlayable = null;
         var added = 0;
+        // Track paths that were skipped because they already exist in the playlist.
+        MediaItem? firstExisting = null;
 
         foreach (var path in paths)
         {
-            if (Playlist.Any(m => string.Equals(m.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+            var existing = Playlist.FirstOrDefault(m =>
+                string.Equals(m.FilePath, path, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                // Remember the first already-existing item so we can select it
+                // when no new items were added (e.g. user re-opens a file to switch playback).
+                firstExisting ??= existing;
                 continue;
+            }
 
             MediaItem item;
             if (MediaMetadata.IsVideo(path))
@@ -1027,7 +1096,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     FilePath = path,
                     CoverHue = MediaMetadata.HueFromPath(path),
                     Format = info.Format,
-                    Bitrate = info.Bitrate
+                    Bitrate = info.Bitrate,
+                    CoverArtBytes = info.CoverArt
                 };
             }
             else
@@ -1054,12 +1124,29 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         ReindexPlaylist();
-        StatusMessage = added > 0 ? $"已加入 {added} 個媒體檔案" : "未加入新檔案（可能重複）";
 
         if (firstNewPlayable is not null)
+        {
+            // New items were added — select the first new playable item.
+            StatusMessage = $"已加入 {added} 個媒體檔案";
             SelectMedia(firstNewPlayable);
+        }
+        else if (added == 0 && firstExisting is not null)
+        {
+            // All selected paths already exist in the playlist.
+            // Select and play the first matching item so the user can switch media type.
+            StatusMessage = $"切換播放：{firstExisting.Title}";
+            SelectMedia(firstExisting);
+        }
         else if (added == 0 && paths.Count > 0)
+        {
+            // Files were skipped for a reason other than duplicates (e.g. unrecognised format).
             StatusMessage = "未辨識到可支援的媒體格式";
+        }
+        else
+        {
+            StatusMessage = "未加入新檔案（可能重複）";
+        }
     }
 
     [RelayCommand]
@@ -1311,6 +1398,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        ClearCurrentCoverImage();
         _audio.Dispose();
         _video.Dispose();
     }

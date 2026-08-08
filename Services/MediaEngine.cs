@@ -28,12 +28,14 @@ public sealed class MediaEngine : IDisposable
     public MediaEngine()
     {
         InitializeLibVlc();
-        // --aout=directsound / no extra video window flags kept minimal for stability.
+        // Avoid --avcodec-hw=any: hardware decoder reset on file switch freezes many GPUs.
         _libVlc = new LibVLC(
             "--no-video-title-show",
             "--quiet",
             "--no-snapshot-preview",
-            "--avcodec-hw=any");
+            "--avcodec-hw=none",
+            "--file-caching=300",
+            "--network-caching=1000");
         Player = new MediaPlayer(_libVlc);
         Player.EndReached += OnEndReached;
         Player.TimeChanged += OnTimeChanged;
@@ -233,11 +235,20 @@ public sealed class MediaEngine : IDisposable
     }
 
     /// <summary>
-    /// Replace media without Stop() first (Stop can freeze the UI).
-    /// Old Media is released later — never dispose while still attached to the player.
+    /// Soft media swap: mute+pause then Play(new). Never call Stop() here — it freezes the UI.
+    /// Old Media is kept until later; never dispose while LibVLC may still reference it.
     /// </summary>
     private bool SwapAndPlay(Media next)
     {
+        // Soft hand-off: pause current decode before attaching new media.
+        try
+        {
+            var s = Player.State;
+            if (s is VLCState.Playing or VLCState.Buffering or VLCState.Opening)
+                Player.SetPause(true);
+        }
+        catch { /* ignore */ }
+
         Media? previous;
         lock (_mediaGate)
         {
@@ -266,45 +277,33 @@ public sealed class MediaEngine : IDisposable
         lock (_mediaGate)
         {
             _pendingRelease.Add(media);
+            // Cap queue size without disposing here (Dispose on UI during skip freezes).
+            while (_pendingRelease.Count > 12)
+                _pendingRelease.RemoveAt(0);
+
             if (_releaseDrainQueued)
                 return;
             _releaseDrainQueued = true;
         }
 
-        // Delay so LibVLC demux can drop the previous media; disposing too early freezes/crashes.
-        Dispatcher.UIThread.Post(async () =>
+        // Long delay: disposing Media mid-decode is a primary freeze source on Windows.
+        _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(750).ConfigureAwait(true);
-                DrainReleasedMedia();
+                await Task.Delay(2500).ConfigureAwait(false);
             }
-            finally
+            catch { /* ignore */ }
+
+            Dispatcher.UIThread.Post(() =>
             {
-                lock (_mediaGate)
-                    _releaseDrainQueued = false;
-                // If more media queued during delay, schedule another drain.
-                lock (_mediaGate)
+                try { DrainReleasedMedia(); }
+                finally
                 {
-                    if (_pendingRelease.Count > 0 && !_releaseDrainQueued)
-                    {
-                        _releaseDrainQueued = true;
-                        Dispatcher.UIThread.Post(async () =>
-                        {
-                            try
-                            {
-                                await Task.Delay(400).ConfigureAwait(true);
-                                DrainReleasedMedia();
-                            }
-                            finally
-                            {
-                                lock (_mediaGate) _releaseDrainQueued = false;
-                            }
-                        }, DispatcherPriority.Background);
-                    }
+                    lock (_mediaGate) _releaseDrainQueued = false;
                 }
-            }
-        }, DispatcherPriority.Background);
+            }, DispatcherPriority.Background);
+        });
     }
 
     private void DrainReleasedMedia()
@@ -328,7 +327,6 @@ public sealed class MediaEngine : IDisposable
         {
             if (ReferenceEquals(media, stillCurrent) || ReferenceEquals(media, stillPlayer))
             {
-                // Still in use — re-queue.
                 lock (_mediaGate) _pendingRelease.Add(media);
                 continue;
             }
@@ -385,8 +383,7 @@ public sealed class MediaEngine : IDisposable
     }
 
     /// <summary>
-    /// Mute + pause the inactive engine. Avoids full Stop during same-session switches
-    /// (Stop can freeze). Prefer <see cref="PrepareForHostTeardown"/> before HWND destroy.
+    /// Mute + pause the inactive engine. Never Stop() — it freezes the UI thread on Windows.
     /// </summary>
     public void YieldForOtherEngine()
     {
@@ -410,32 +407,10 @@ public sealed class MediaEngine : IDisposable
     }
 
     /// <summary>
-    /// Must run before EmbeddedVideoView destroys its HWND (stage collapse).
-    /// Clearing Hwnd while still Opening/Playing is a common LibVLC hard freeze on Windows.
+    /// Soft teardown only (no Stop, no Hwnd clear). Video HWND is kept for the session.
+    /// Kept for call sites that previously destroyed the host.
     /// </summary>
-    public void PrepareForHostTeardown()
-    {
-        try
-        {
-            var s = Player.State;
-            if (s is not (VLCState.NothingSpecial or VLCState.Stopped or VLCState.Error or VLCState.Ended))
-            {
-                try { Player.SetPause(true); }
-                catch { /* ignore */ }
-                try { Player.Stop(); }
-                catch { /* ignore */ }
-            }
-        }
-        catch { /* ignore */ }
-
-        try
-        {
-            // Detach output before the child HWND is destroyed.
-            if (Player.Hwnd != IntPtr.Zero)
-                Player.Hwnd = IntPtr.Zero;
-        }
-        catch { /* ignore */ }
-    }
+    public void PrepareForHostTeardown() => YieldForOtherEngine();
 
     public void TogglePause()
     {
@@ -512,9 +487,17 @@ public sealed class MediaEngine : IDisposable
     private void OnEndReached(object? sender, EventArgs e)
         => Dispatcher.UIThread.Post(() => EndReached?.Invoke());
 
+    private long _lastTimeUiPostMs;
+
     private void OnTimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e)
     {
-        // LibVLC fires this very often; hop to UI without capturing large state.
+        // Throttle: LibVLC can fire hundreds of times/sec and flood the UI dispatcher
+        // during rapid file switches, causing multi-second freezes.
+        var now = Environment.TickCount64;
+        if (now - _lastTimeUiPostMs < 120)
+            return;
+        _lastTimeUiPostMs = now;
+
         var length = Player.Length;
         var time = e.Time;
         Dispatcher.UIThread.Post(() =>

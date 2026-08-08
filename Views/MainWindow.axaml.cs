@@ -76,7 +76,7 @@ public partial class MainWindow : Window
         vm.PromptNetworkUrlAsync = PromptNetworkUrlAsync;
         vm.PropertyChanged += OnViewModelPropertyChanged;
 
-        ApplyStageRowHeights(vm.ActiveMediaKind);
+        // Keep video HWND mounted for the whole session (overlay UI for audio/idle).
         Dispatcher.UIThread.Post(PrepareVideoHost, DispatcherPriority.Loaded);
     }
 
@@ -84,13 +84,11 @@ public partial class MainWindow : Window
     {
         if (sender is not MainViewModel vm) return;
 
-        // Only react to ActiveMediaKind — IsVideoStage/IsAudioStage also change and would
-        // re-apply row heights 3× and thrash the HWND host when switching sources.
-        if (e.PropertyName == nameof(MainViewModel.ActiveMediaKind))
+        // Video HWND stays mounted; only re-attach when entering video mode.
+        if (e.PropertyName == nameof(MainViewModel.ActiveMediaKind)
+            && vm.ActiveMediaKind == MediaKind.Video)
         {
-            ApplyStageRowHeights(vm.ActiveMediaKind);
-            if (vm.ActiveMediaKind == MediaKind.Video)
-                Dispatcher.UIThread.Post(PrepareVideoHost, DispatcherPriority.Loaded);
+            Dispatcher.UIThread.Post(PrepareVideoHost, DispatcherPriority.Loaded);
         }
 
         if (e.PropertyName == nameof(MainViewModel.IsControlBarVisible)
@@ -98,57 +96,6 @@ public partial class MainWindow : Window
             && vm.IsControlBarVisible)
         {
             RestartFullscreenHideTimer();
-        }
-    }
-
-    /// <summary>
-    /// KD-12 matrix: Video → host *, audio 0; Audio/None → host 0, audio *.
-    /// </summary>
-    private MediaKind? _appliedStageKind;
-
-    private void ApplyStageRowHeights(MediaKind kind)
-    {
-        if (StageRoot.RowDefinitions.Count < 2)
-            return;
-
-        // Skip no-op layout when staying in the same stage (audio→audio / video→video).
-        if (_appliedStageKind == kind)
-            return;
-
-        // Leaving video stage: detach before native host is destroyed (ViewModel also prepares).
-        if (_appliedStageKind == MediaKind.Video && kind != MediaKind.Video
-            && DataContext is MainViewModel vmLeave)
-        {
-            try
-            {
-                if (vmLeave.VideoMediaPlayer.Hwnd != IntPtr.Zero)
-                {
-                    var st = vmLeave.VideoMediaPlayer.State;
-                    if (st is LibVLCSharp.Shared.VLCState.Playing
-                        or LibVLCSharp.Shared.VLCState.Buffering
-                        or LibVLCSharp.Shared.VLCState.Opening
-                        or LibVLCSharp.Shared.VLCState.Paused)
-                    {
-                        try { vmLeave.VideoMediaPlayer.SetPause(true); } catch { /* ignore */ }
-                        try { vmLeave.VideoMediaPlayer.Stop(); } catch { /* ignore */ }
-                    }
-                    vmLeave.VideoMediaPlayer.Hwnd = IntPtr.Zero;
-                }
-            }
-            catch { /* ignore */ }
-        }
-
-        _appliedStageKind = kind;
-
-        if (kind == MediaKind.Video)
-        {
-            StageRoot.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-            StageRoot.RowDefinitions[1].Height = new GridLength(0);
-        }
-        else
-        {
-            StageRoot.RowDefinitions[0].Height = new GridLength(0);
-            StageRoot.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
         }
     }
 
