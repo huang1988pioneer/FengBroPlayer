@@ -50,9 +50,12 @@ public partial class MainWindow : Window
 
         // Slider marks pointer events Handled on the thumb/track; XAML handlers miss them
         // unless we subscribe with handledEventsToo. Without BeginSeek, Progress snaps back
-        // on TimeChanged and LibVLC never receives the seek (noticeable on .mp4).
+        // on TimeChanged and LibVLC never receives the seek (mp3/mp4).
+        // Press: tunnel so _isSeeking is set before Value moves.
+        // Release: bubble so Track/Thumb has already committed the final Value (tunnel
+        // EndSeek was seeking the pre-click position — looked like "timeline won't jump").
         SeekSlider.AddHandler(PointerPressedEvent, OnSeekStart, RoutingStrategies.Tunnel, handledEventsToo: true);
-        SeekSlider.AddHandler(PointerReleasedEvent, OnSeekEnd, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SeekSlider.AddHandler(PointerReleasedEvent, OnSeekEnd, RoutingStrategies.Bubble, handledEventsToo: true);
         SeekSlider.AddHandler(PointerCaptureLostEvent, OnSeekCaptureLost, RoutingStrategies.Bubble, handledEventsToo: true);
 
         _fsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
@@ -452,20 +455,30 @@ public partial class MainWindow : Window
 
     private void OnSeekStart(object? sender, PointerPressedEventArgs e)
     {
+        if (sender is not Control c)
+            return;
+        if (!e.GetCurrentPoint(c).Properties.IsLeftButtonPressed)
+            return;
         if (DataContext is MainViewModel vm)
             vm.BeginSeek();
     }
 
     private void OnSeekEnd(object? sender, PointerReleasedEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
-            vm.EndSeek();
+        if (DataContext is not MainViewModel vm)
+            return;
+        // Prefer the Slider's committed value over binding lag.
+        if (sender is Slider slider)
+            vm.Progress = slider.Value;
+        vm.EndSeek();
     }
 
     private void OnSeekCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
-            vm.EndSeek();
+        if (DataContext is not MainViewModel vm)
+            return;
+        vm.Progress = SeekSlider.Value;
+        vm.EndSeek();
     }
 
     private void OnSeekKeyUp(object? sender, KeyEventArgs e)
@@ -474,6 +487,8 @@ public partial class MainWindow : Window
         {
             if (DataContext is MainViewModel vm)
             {
+                if (sender is Slider slider)
+                    vm.Progress = slider.Value;
                 vm.BeginSeek();
                 vm.EndSeek();
             }

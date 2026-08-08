@@ -17,6 +17,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly MediaEngine _audio = new();
     private readonly MediaEngine _video = new();
     private bool _isSeeking;
+    /// <summary>Ignore engine TimeChanged until this tick so scrub UI does not snap back (mp3/mp4).</summary>
+    private long _suppressTimeChangedUntilTick;
+    private double _seekTargetRatio;
     private bool _disposed;
     private bool _playlistVisibleBeforeFs = true;
     private double _volumeBeforeMute = 1.0;
@@ -667,8 +670,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (_isSeeking && CurrentMedia?.IsPlayable == true && ActiveEngine is not null)
         {
-            ActiveEngine.SeekRatio(Progress);
-            UpdatePositionLabel(Progress);
+            _seekTargetRatio = Math.Clamp(Progress, 0, 1);
+            ActiveEngine.SeekRatio(_seekTargetRatio);
+            Progress = _seekTargetRatio;
+            UpdatePositionLabel(_seekTargetRatio);
+            // LibVLC keeps emitting the pre-seek Time for a short window; freeze UI progress.
+            _suppressTimeChangedUntilTick = Environment.TickCount64 + 500;
         }
         _isSeeking = false;
     }
@@ -694,6 +701,21 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         var engine = ActiveEngine;
         if (engine is null) return;
+
+        // After EndSeek, drop stale times until demuxer catches up (common with mp3).
+        if (Environment.TickCount64 < _suppressTimeChangedUntilTick)
+        {
+            var ratio = lengthMs > 0
+                ? Math.Clamp((double)timeMs / lengthMs, 0, 1)
+                : engine.GetProgressRatio();
+            if (Math.Abs(ratio - _seekTargetRatio) > 0.03)
+            {
+                Progress = _seekTargetRatio;
+                UpdatePositionLabel(_seekTargetRatio);
+                return;
+            }
+            _suppressTimeChangedUntilTick = 0;
+        }
 
         Progress = engine.GetProgressRatio();
         if (lengthMs > 0)

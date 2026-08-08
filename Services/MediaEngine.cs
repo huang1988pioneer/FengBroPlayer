@@ -176,34 +176,34 @@ public sealed class MediaEngine : IDisposable
     public bool IsSeekable => Player.IsSeekable;
 
     /// <summary>
-    /// Jump to a 0–1 position. Prefer fractional Position (reliable for local MP4),
-    /// then absolute Time when length is known.
+    /// Jump to a 0–1 position. Prefer absolute Time when length is known (mp3/vbr-friendly),
+    /// otherwise fractional Position. Do not set both — dual seeks can cancel on some demuxers.
     /// </summary>
     public void SeekRatio(double ratio)
     {
         ratio = Math.Clamp(ratio, 0, 1);
-        var pos = (float)ratio;
 
         try
         {
-            // Position is the primary seek path for container formats (mp4/mkv/…).
-            Player.Position = pos;
+            var length = Player.Length;
+            if (length > 0)
+            {
+                // Millisecond seek is more reliable for local audio (mp3) and long files.
+                Player.Time = (long)Math.Round(length * ratio);
+                return;
+            }
+
+            Player.Position = (float)ratio;
         }
         catch
         {
-            // Some states reject Position; fall through to Time.
-        }
-
-        // Reinforce with absolute time when duration is known (helps long files / edge demuxers).
-        if (Player.Length > 0)
-        {
             try
             {
-                Player.Time = (long)(Player.Length * ratio);
+                Player.Position = (float)Math.Clamp(ratio, 0, 1);
             }
             catch
             {
-                // Ignore; Position above may have already applied.
+                // Some states reject seek; ignore.
             }
         }
     }
@@ -211,16 +211,24 @@ public sealed class MediaEngine : IDisposable
     /// <summary>Seek by a relative number of seconds (negative = rewind).</summary>
     public void SeekBySeconds(double seconds)
     {
-        if (Player.Length <= 0)
+        var length = Player.Length;
+        if (length > 0)
         {
-            // Approximate via Position if length unknown.
-            var pos = Player.Position + (float)(seconds / 600.0); // assume ~10 min if unknown
-            SeekRatio(pos);
+            var next = Math.Clamp(Player.Time + (long)(seconds * 1000), 0, length);
+            try
+            {
+                Player.Time = next;
+            }
+            catch
+            {
+                SeekRatio((double)next / length);
+            }
             return;
         }
 
-        var next = Math.Clamp(Player.Time + (long)(seconds * 1000), 0, Player.Length);
-        SeekRatio((double)next / Player.Length);
+        // Approximate via Position if length unknown (~10 min placeholder).
+        var pos = Player.Position + (float)(seconds / 600.0);
+        SeekRatio(pos);
     }
 
     public double GetProgressRatio()
