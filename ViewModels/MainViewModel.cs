@@ -222,6 +222,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 IsPlaying = true;
                 StatusMessage = $"正在播放：{item.Title}";
             }
+            else if (item.IsNetworkSource && item.SourceUrl is not null)
+            {
+                PlayNetworkAudio(item.SourceUrl, item.Title);
+            }
             else
             {
                 _audio.StopIfActive();
@@ -279,8 +283,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
+    private void PlayNetworkAudio(string url, string title)
+    {
+        // Audio engine needs no HWND — works even while stage is in idle/audio layout.
+        if (_audio.PlayUrl(url, requireVideoHost: false))
+        {
+            _audio.SetRate((float)PlaybackRate);
+            IsPlaying = true;
+            StatusMessage = $"正在播放網路音訊：{title}";
+            return;
+        }
+
+        StatusMessage = "無法開始此網路音訊。請確認網址可直接存取（http/https 媒體檔）。";
+        IsPlaying = false;
+    }
+
     private void PlayNetworkVideo(string url, string title)
     {
+        // Prefer embedded video when host is ready; retry after stage layout creates HWND.
         PrepareVideoHost?.Invoke();
         if (_video.PlayUrl(url, requireVideoHost: true))
         {
@@ -290,8 +310,47 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        StatusMessage = "無法開始此網路影片。請檢查網址或 LibVLC 支援。";
-        IsPlaying = false;
+        StatusMessage = "正在連線網路串流…";
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        {
+            for (var i = 0; i < 15; i++)
+            {
+                PrepareVideoHost?.Invoke();
+                if (_video.PlayUrl(url, requireVideoHost: true))
+                {
+                    _video.SetRate((float)PlaybackRate);
+                    IsPlaying = true;
+                    StatusMessage = $"正在播放網路影片：{title}";
+                    return;
+                }
+
+                // Host still missing — try audio engine so pure-audio URLs still play.
+                if (i >= 4 && _audio.PlayUrl(url, requireVideoHost: false))
+                {
+                    _video.StopIfActive();
+                    ActiveMediaKind = MediaKind.Audio;
+                    _audio.SetRate((float)PlaybackRate);
+                    IsPlaying = true;
+                    StatusMessage = $"已以音訊模式播放網路串流：{title}";
+                    return;
+                }
+
+                await Task.Delay(50);
+            }
+
+            // Last attempt without host gate (may show no video surface).
+            if (_video.HasVideoHost && _video.PlayUrl(url, requireVideoHost: true))
+            {
+                _video.SetRate((float)PlaybackRate);
+                IsPlaying = true;
+                StatusMessage = $"正在播放網路影片：{title}";
+                return;
+            }
+
+            StatusMessage =
+                "無法開啟網路串流。請確認為可直接播放的 http(s)/rtsp 媒體網址（非需登入頁面）；YouTube 等站台可能需系統 VLC 腳本支援。";
+            IsPlaying = false;
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     [RelayCommand]
@@ -349,7 +408,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         else if (item.SourceUrl is not null)
         {
-            PlayNetworkVideo(item.SourceUrl, item.Title);
+            if (item.Kind == MediaKind.Audio)
+                PlayNetworkAudio(item.SourceUrl, item.Title);
+            else
+                PlayNetworkVideo(item.SourceUrl, item.Title);
         }
     }
 
@@ -562,17 +624,25 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (!MediaEngine.TryNormalizeStreamUri(url, out var uri))
         {
-            StatusMessage = "請輸入有效的 http:// 或 https:// 媒體網址";
+            StatusMessage = "請輸入有效的串流網址（http/https/rtsp，可省略 https://）";
             return;
         }
+
+        NetworkUrl = uri.AbsoluteUri;
+
+        var path = uri.AbsolutePath;
+        var isAudio = MediaMetadata.IsAudio(path);
+        var isVideo = MediaMetadata.IsVideo(path) || LooksLikeStreamPlaylist(path);
+        var kind = isAudio && !isVideo ? MediaKind.Audio : MediaKind.Video;
 
         var title = uri.Host.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
                     uri.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase)
             ? "YouTube 影片"
-            : uri.Host;
+            : !string.IsNullOrWhiteSpace(Path.GetFileName(path)) && path != "/"
+                ? Uri.UnescapeDataString(Path.GetFileName(path))
+                : uri.Host;
 
         var existing = Playlist.FirstOrDefault(m =>
             string.Equals(m.SourceUrl, uri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
@@ -582,20 +652,28 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        var ext = Path.GetExtension(path);
         var item = new MediaItem
         {
             Index = Playlist.Count + 1,
             Title = title,
             Subtitle = uri.AbsoluteUri,
             Duration = "--:--",
-            Kind = MediaKind.Video,
+            Kind = kind,
             SourceUrl = uri.AbsoluteUri,
-            CoverHue = "195",
-            Format = "URL"
+            CoverHue = kind == MediaKind.Audio ? "210" : "195",
+            Format = string.IsNullOrEmpty(ext) ? "URL" : ext.TrimStart('.').ToUpperInvariant()
         };
         Playlist.Insert(0, item);
         ReindexPlaylist();
         SelectMedia(item);
+    }
+
+    private static bool LooksLikeStreamPlaylist(string path)
+    {
+        return path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".mpd", StringComparison.OrdinalIgnoreCase);
     }
 
     [RelayCommand]

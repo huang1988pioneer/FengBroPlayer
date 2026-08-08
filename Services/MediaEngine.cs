@@ -161,22 +161,53 @@ public sealed class MediaEngine : IDisposable
         return ok;
     }
 
-    /// <summary>Starts a HTTP(S) media source, including services LibVLC can resolve.</summary>
+    /// <summary>
+    /// Starts a network media source (http/https/rtsp/…).
+    /// Adds network caching options so remote streams start more reliably.
+    /// </summary>
     public bool PlayUrl(string url, bool requireVideoHost = false)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (!TryNormalizeStreamUri(url, out var uri))
             return false;
 
         if (requireVideoHost && Player.Hwnd == IntPtr.Zero)
             return false;
 
         var next = new Media(_libVlc, uri.AbsoluteUri, FromType.FromLocation);
+        // Help LibVLC open remote HTTP(S) / HLS streams without immediate stall.
+        next.AddOption(":network-caching=1500");
+        next.AddOption(":live-caching=1500");
+        next.AddOption(":http-reconnect");
+
         var previous = _currentMedia;
         _currentMedia = next;
         var ok = Player.Play(next);
         DisposeMediaDeferred(previous);
         return ok;
+    }
+
+    /// <summary>Accepts http(s), rtsp, rtmp, mms, and URLs missing a scheme (defaults to https).</summary>
+    public static bool TryNormalizeStreamUri(string? url, out Uri uri)
+    {
+        uri = null!;
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        var s = url.Trim().Trim('<', '>', '"', '\'');
+        if (s.StartsWith("//", StringComparison.Ordinal))
+            s = "https:" + s;
+        else if (!s.Contains("://", StringComparison.Ordinal))
+            s = "https://" + s;
+
+        if (!Uri.TryCreate(s, UriKind.Absolute, out var parsed) || !parsed.IsAbsoluteUri)
+            return false;
+
+        var scheme = parsed.Scheme;
+        if (scheme is not ("http" or "https" or "rtsp" or "rtsps" or "rtmp" or "rtmps" or "mms" or "mmsh" or "rtp"))
+            return false;
+
+        uri = parsed;
+        return true;
     }
 
     public bool HasVideoHost => Player.Hwnd != IntPtr.Zero;

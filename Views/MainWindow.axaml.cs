@@ -249,18 +249,20 @@ public partial class MainWindow : Window
     {
         var box = new TextBox
         {
-            PlaceholderText = "https://…",
-            MinWidth = 360,
-            Text = (DataContext as MainViewModel)?.NetworkUrl ?? ""
+            PlaceholderText = "https://example.com/stream.m3u8 或音訊/影片直連網址",
+            MinWidth = 400,
+            Text = (DataContext as MainViewModel)?.NetworkUrl ?? "",
+            Classes = { "search" }
         };
 
         var dialog = new Window
         {
             Title = "開啟網路串流",
-            Width = 440,
-            Height = 160,
+            Width = 480,
+            Height = 180,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            CanResize = false
+            CanResize = false,
+            Background = Background
         };
 
         string? result = null;
@@ -278,7 +280,14 @@ public partial class MainWindow : Window
 
         Button CreateDialogButton(string text, bool isDefault)
         {
-            var b = new Button { Content = text, MinWidth = 72, IsDefault = isDefault, IsCancel = !isDefault };
+            var b = new Button
+            {
+                Content = text,
+                MinWidth = 80,
+                IsDefault = isDefault,
+                IsCancel = !isDefault,
+                Classes = { isDefault ? "chip" : "ghost" }
+            };
             b.Click += (_, _) =>
             {
                 if (isDefault) Accept();
@@ -293,7 +302,11 @@ public partial class MainWindow : Window
             Spacing = 12,
             Children =
             {
-                new TextBlock { Text = "輸入 http(s) 媒體網址：" },
+                new TextBlock
+                {
+                    Text = "輸入可直接播放的串流網址（http/https/rtsp，可省略 https://）：",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
                 box,
                 new StackPanel
                 {
@@ -316,6 +329,12 @@ public partial class MainWindow : Window
                 Accept();
                 e.Handled = true;
             }
+        };
+
+        dialog.Opened += (_, _) =>
+        {
+            box.Focus();
+            box.CaretIndex = box.Text?.Length ?? 0;
         };
 
         await dialog.ShowDialog(this);
