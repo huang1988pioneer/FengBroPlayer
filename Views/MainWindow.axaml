@@ -50,6 +50,13 @@
                 <MenuItem Header="開啟網路串流…"
                           Command="{Binding OpenNetworkUrlCommand}" />
                 <Separator />
+                <MenuItem Header="開啟字幕…"
+                          Command="{Binding OpenSubtitleCommand}"
+                          IsEnabled="{Binding IsVideoStage}" />
+                <MenuItem Header="關閉字幕"
+                          Command="{Binding ClearSubtitleCommand}"
+                          IsEnabled="{Binding HasSubtitle}" />
+                <Separator />
                 <MenuItem Header="最近播放"
                           Command="{Binding ShowRecentDockCommand}" />
                 <MenuItem Header="最近網路串流"
@@ -582,6 +589,20 @@
                                 Content="⛶"
                                 ToolTip.Tip="全螢幕 (F)"
                                 Command="{Binding ToggleFullscreenCommand}" />
+                        <!-- Subtitle button: visible only in video mode -->
+                        <Button Classes="transport"
+                                IsVisible="{Binding IsVideoStage}"
+                                ToolTip.Tip="{Binding HasSubtitle, Converter={x:Static conv:SubtitleTooltipConverter.Instance}}"
+                                Command="{Binding OpenSubtitleCommand}">
+                            <Panel>
+                                <TextBlock Text="CC" FontSize="11" FontWeight="Bold"
+                                           IsVisible="{Binding !HasSubtitle}"
+                                           Opacity="0.5" />
+                                <TextBlock Text="CC" FontSize="11" FontWeight="Bold"
+                                           IsVisible="{Binding HasSubtitle}"
+                                           Foreground="{StaticResource AccentBrush}" />
+                            </Panel>
+                        </Button>
                         <Button Classes="transport"
                                 Content="📂"
                                 ToolTip.Tip="開啟檔案 (Ctrl+O)"

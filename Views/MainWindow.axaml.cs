@@ -36,6 +36,11 @@ public partial class MainWindow : Window
             .ToArray()
     };
 
+    private static readonly FilePickerFileType SubtitleType = new("字幕檔案")
+    {
+        Patterns = MediaMetadata.SubtitleExtensions.Select(e => $"*{e}").ToArray()
+    };
+
     private readonly DispatcherTimer _fsHideTimer;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
     private bool _applyingWindowState;
@@ -74,6 +79,7 @@ public partial class MainWindow : Window
         vm.RequestClose = Close;
         vm.SetTopmost = top => Topmost = top;
         vm.PromptNetworkUrlAsync = PromptNetworkUrlAsync;
+        vm.PickSubtitleAsync = PickSubtitleFileAsync;
         vm.PropertyChanged += OnViewModelPropertyChanged;
 
         // Keep video HWND mounted for the whole session (overlay UI for audio/idle).
@@ -223,6 +229,19 @@ public partial class MainWindow : Window
         }
 
         return paths;
+    }
+
+    private async Task<string?> PickSubtitleFileAsync()
+    {
+        var options = new FilePickerOpenOptions
+        {
+            AllowMultiple = false,
+            Title = "開啟字幕檔案",
+            FileTypeFilter = [SubtitleType, FilePickerFileTypes.All]
+        };
+        var files = await StorageProvider.OpenFilePickerAsync(options);
+        if (files.Count == 0) return null;
+        return files[0].TryGetLocalPath();
     }
 
     private async Task<string?> PromptNetworkUrlAsync()

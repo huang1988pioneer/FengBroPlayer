@@ -45,6 +45,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public Action<bool>? SetTopmost { get; set; }
     public Func<Task<string?>>? PromptNetworkUrlAsync { get; set; }
 
+    /// <summary>Set by the view to pick a subtitle file via native file picker.</summary>
+    public Func<Task<string?>>? PickSubtitleAsync { get; set; }
+
     public ObservableCollection<MediaItem> Playlist { get; } = [];
     public ObservableCollection<RecentPlayEntry> RecentItems => _recent.Items;
     public ObservableCollection<RecentPlayEntry> RecentStreamItems => _streams.Items;
@@ -81,6 +84,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty] public partial bool HasPlayableMedia { get; set; }
     [ObservableProperty] public partial bool HasRecentItems { get; set; }
     [ObservableProperty] public partial bool HasRecentStreamItems { get; set; }
+
+    /// <summary>Path of the currently loaded external subtitle file (empty = none).</summary>
+    [ObservableProperty] public partial string SubtitlePath { get; set; } = string.Empty;
+    [ObservableProperty] public partial bool HasSubtitle { get; set; }
 
     /// <summary>Decoded album art for the current audio track (shown on audio stage).</summary>
     [ObservableProperty] public partial Bitmap? CurrentCoverImage { get; set; }
@@ -512,6 +519,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _video.SetRate((float)PlaybackRate);
             IsPlaying = true;
             StatusMessage = $"正在播放影片：{title}";
+            ApplySubtitleAfterPlay(path);
             return;
         }
 
@@ -527,6 +535,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     _video.SetRate((float)PlaybackRate);
                     IsPlaying = true;
                     StatusMessage = $"正在播放影片：{title}";
+                    ApplySubtitleAfterPlay(path);
                     return;
                 }
                 await Task.Delay(40);
@@ -535,6 +544,38 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 return;
             StatusMessage = "無法嵌入影片畫面（主機控制項尚未就緒）。請再按一次播放。";
             IsPlaying = false;
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// After a video starts, load a subtitle in this priority order:
+    /// 1. A subtitle that was manually selected by the user (SubtitlePath)
+    /// 2. A sidecar file next to the video with the same stem (.srt / .ass / …)
+    /// </summary>
+    private void ApplySubtitleAfterPlay(string videoPath)
+    {
+        // Small delay so LibVLC has a parsed media before AddSlave is called.
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        {
+            await Task.Delay(300);
+
+            // Prefer a manually chosen subtitle, otherwise look for a sidecar.
+            var wasManual = HasSubtitle && File.Exists(SubtitlePath);
+            var subPath = wasManual
+                ? SubtitlePath
+                : MediaMetadata.FindSidecarSubtitle(videoPath);
+
+            if (subPath is null) return;
+
+            if (_video.AddSubtitleFile(subPath))
+            {
+                SubtitlePath = subPath;
+                HasSubtitle = true;
+                // Only show auto-load banner when the subtitle was auto-detected;
+                // manual loads are already announced by OpenSubtitleAsync.
+                if (!wasManual)
+                    StatusMessage = $"已自動載入字幕：{Path.GetFileName(subPath)}";
+            }
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
@@ -1039,6 +1080,50 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         var paths = await PickFilesAsync("video");
         if (paths.Count == 0) return;
         ImportPaths(paths);
+    }
+
+    [RelayCommand]
+    private async Task OpenSubtitleAsync()
+    {
+        if (ActiveMediaKind != MediaKind.Video)
+        {
+            StatusMessage = "字幕僅適用於影片播放模式";
+            return;
+        }
+
+        if (PickSubtitleAsync is null)
+        {
+            StatusMessage = "檔案對話框尚未就緒";
+            return;
+        }
+
+        var path = await PickSubtitleAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        // Load the subtitle immediately into the running player,
+        // and remember it for the next PlayLocalVideo() call.
+        SubtitlePath = path;
+        HasSubtitle = true;
+
+        if (_video.AddSubtitleFile(path))
+        {
+            StatusMessage = $"已載入字幕：{Path.GetFileName(path)}";
+        }
+        else
+        {
+            // AddSlave may fail if the player has not opened media yet;
+            // the subtitle will be applied automatically on next play.
+            StatusMessage = $"字幕將在下次播放時套用：{Path.GetFileName(path)}";
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSubtitle()
+    {
+        SubtitlePath = string.Empty;
+        HasSubtitle = false;
+        _video.ClearSubtitles();
+        StatusMessage = "已關閉字幕";
     }
 
     public void ImportDroppedPaths(IEnumerable<string> paths)

@@ -16,6 +16,34 @@ public static class MediaMetadata
         ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".m4v", ".ts", ".flv"
     ];
 
+    public static readonly string[] SubtitleExtensions =
+    [
+        ".srt", ".ass", ".ssa", ".vtt", ".sub"
+    ];
+
+    /// <summary>
+    /// Looks for a subtitle file beside <paramref name="videoPath"/> with the same stem.
+    /// Checks each <see cref="SubtitleExtensions"/> in order; returns the first match or null.
+    /// Example: "movie.mp4" → "movie.srt" or "movie.ass"
+    /// </summary>
+    public static string? FindSidecarSubtitle(string videoPath)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath))
+            return null;
+        var dir = Path.GetDirectoryName(videoPath);
+        var stem = Path.GetFileNameWithoutExtension(videoPath);
+        if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(stem))
+            return null;
+
+        foreach (var ext in SubtitleExtensions)
+        {
+            var candidate = Path.Combine(dir, stem + ext);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+        return null;
+    }
+
     private static readonly string[] CoverFileNames =
     [
         "cover.jpg", "cover.jpeg", "cover.png", "cover.webp",

@@ -422,6 +422,40 @@ public sealed class MediaEngine : IDisposable
     public bool IsSeekable => Player.IsSeekable;
 
     /// <summary>
+    /// Loads an external subtitle file (SRT, ASS, VTT…) into the running player.
+    /// Must be called after Play() so the media is already attached.
+    /// Returns true when the slave was accepted by LibVLC.
+    /// </summary>
+    public bool AddSubtitleFile(string path)
+    {
+        if (!File.Exists(path))
+            return false;
+        try
+        {
+            // Build a file:// URI that LibVLC understands on all platforms.
+            var uri = new Uri(path).AbsoluteUri;
+            return Player.AddSlave(MediaSlaveType.Subtitle, uri, select: true);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Disables all subtitle tracks (sets the active SPU track to -1).
+    /// The subtitle data stays loaded but becomes invisible.
+    /// </summary>
+    public void ClearSubtitles()
+    {
+        try
+        {
+            Player.SetSpu(-1);
+        }
+        catch { /* ignore */ }
+    }
+
+    /// <summary>
     /// Jump to a 0–1 position. Prefer absolute Time when length is known (mp3/vbr-friendly),
     /// otherwise fractional Position. Do not set both — dual seeks can cancel on some demuxers.
     /// </summary>
