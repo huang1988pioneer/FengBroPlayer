@@ -6,16 +6,27 @@ namespace MusicVideoMediaPlayer.Models;
 /// <summary>One row in the recently-played list (in-memory + JSON persistence).</summary>
 public partial class RecentPlayEntry : ObservableObject
 {
-    public required string Title { get; init; }
-    public string Subtitle { get; init; } = "";
+    [ObservableProperty]
+    public partial string Title { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string Subtitle { get; set; } = "";
+
     public string? FilePath { get; init; }
     public string? SourceUrl { get; init; }
     public MediaKind Kind { get; init; } = MediaKind.None;
-    public string Duration { get; init; } = "--:--";
-    public string Format { get; init; } = "";
+
+    [ObservableProperty]
+    public partial string Duration { get; set; } = "--:--";
+
+    [ObservableProperty]
+    public partial string Format { get; set; } = "";
+
     public string CoverHue { get; init; } = "200";
     public string Bitrate { get; init; } = "";
-    public DateTime PlayedAtUtc { get; set; }
+
+    [ObservableProperty]
+    public partial DateTime PlayedAtUtc { get; set; }
 
     public bool IsLocalFile => !string.IsNullOrWhiteSpace(FilePath);
     public bool IsNetworkSource => !string.IsNullOrWhiteSpace(SourceUrl);
@@ -50,6 +61,8 @@ public partial class RecentPlayEntry : ObservableObject
             return local.ToString("yyyy/M/d");
         }
     }
+
+    partial void OnPlayedAtUtcChanged(DateTime value) => OnPropertyChanged(nameof(PlayedAtText));
 
     public static RecentPlayEntry FromMedia(MediaItem item, DateTime utcNow)
         => new()

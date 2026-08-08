@@ -192,7 +192,11 @@ public sealed class MediaEngine : IDisposable
     /// Play a direct media URL (e.g. yt-dlp resolved googlevideo link).
     /// Optional <paramref name="audioSlaveUrl"/> for DASH video+audio pairs.
     /// </summary>
-    public bool PlayDirectUrl(string streamUrl, string? audioSlaveUrl = null, bool requireVideoHost = false)
+    public bool PlayDirectUrl(
+        string streamUrl,
+        string? audioSlaveUrl = null,
+        bool requireVideoHost = false,
+        string? httpReferrer = null)
     {
         if (string.IsNullOrWhiteSpace(streamUrl))
             return false;
@@ -203,15 +207,21 @@ public sealed class MediaEngine : IDisposable
         Media next;
         try
         {
-            next = new Media(_libVlc, streamUrl, FromType.FromLocation);
-            next.AddOption(":network-caching=1500");
-            next.AddOption(":live-caching=1500");
+            next = new Media(_libVlc, streamUrl.Trim(), FromType.FromLocation);
+            next.AddOption(":network-caching=3000");
+            next.AddOption(":live-caching=3000");
             next.AddOption(":http-reconnect");
             next.AddOption(":http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            if (!string.IsNullOrWhiteSpace(httpReferrer))
+                next.AddOption(":http-referrer=" + httpReferrer);
+            else if (streamUrl.Contains("googlevideo.com", StringComparison.OrdinalIgnoreCase)
+                     || streamUrl.Contains("youtube.com", StringComparison.OrdinalIgnoreCase))
+                next.AddOption(":http-referrer=https://www.youtube.com/");
+
             if (!string.IsNullOrWhiteSpace(audioSlaveUrl))
             {
-                // LibVLC input-slave for separate audio track (DASH).
-                next.AddOption(":input-slave=" + audioSlaveUrl);
+                // Quote slave URL — raw & in query strings breaks LibVLC option parsing.
+                next.AddOption(":input-slave=" + audioSlaveUrl.Replace(":", "\\:", StringComparison.Ordinal));
             }
         }
         catch

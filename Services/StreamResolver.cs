@@ -20,7 +20,9 @@ public static class StreamResolver
         string Title,
         string PrimaryUrl,
         string? AudioUrl,
-        bool IsAudioOnly);
+        bool IsAudioOnly,
+        string? Duration = null,
+        string? Uploader = null);
 
     public static bool NeedsExtraction(string? url)
     {
@@ -119,81 +121,147 @@ public static class StreamResolver
         if (ytdlp is null)
             return null;
 
-        // 1) Prefer single-file progressive format (b) — one URL, works best with LibVLC.
-        var single = await RunYtDlpAsync(
+        // Prefer progressive HTTPS MP4 for LibVLC (single file, no HLS/DASH glue).
+        // Format "b/best" often returns m3u8 which some LibVLC builds fail to open.
+        var formatCandidates = new[]
+        {
+            "best[ext=mp4][protocol^=http][protocol!*=m3u8]/best[ext=mp4][protocol^=http]/18/22/best[ext=mp4]/b",
+            "b/best",
+            "bv*+ba/b",
+        };
+
+        foreach (var format in formatCandidates)
+        {
+            var result = await RunYtDlpAsync(
+                ytdlp,
+                [
+                    "--no-playlist",
+                    "--no-warnings",
+                    "-f", format,
+                    "--print", "%(title)s",
+                    "--print", "%(duration>%H:%M:%S)s",
+                    "--print", "%(uploader,channel,creator|)s",
+                    "-g",
+                    pageUri.AbsoluteUri
+                ],
+                cancellationToken).ConfigureAwait(false);
+
+            if (result is not { ExitCode: 0 })
+                continue;
+
+            var parsed = ParseYtDlpMetaAndUrls(result.Lines, pageUri);
+            if (parsed is null)
+                continue;
+
+            // Reject meta-only (PrimaryUrl still the page) — keep trying other formats.
+            if (string.Equals(parsed.PrimaryUrl, pageUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // First candidate: force single-URL progressive path (ignore accidental dual urls).
+            if (format.Contains("18/22", StringComparison.Ordinal) || format.Contains("ext=mp4", StringComparison.Ordinal))
+                return parsed with { IsAudioOnly = false, AudioUrl = null };
+
+            return parsed;
+        }
+
+        // Metadata-only attempt (title) when stream formats fail — does not enable playback.
+        return await FetchTitleAsync(pageUri.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Lightweight title lookup (no stream URL) for UI labels.</summary>
+    public static async Task<ResolvedStream?> FetchTitleAsync(
+        string pageUrl,
+        CancellationToken cancellationToken = default)
+    {
+        if (!MediaEngine.TryNormalizeStreamUri(pageUrl, out var pageUri))
+            return null;
+        var ytdlp = FindYtDlpPath();
+        if (ytdlp is null)
+            return null;
+
+        var result = await RunYtDlpAsync(
             ytdlp,
             [
                 "--no-playlist",
                 "--no-warnings",
-                "-f", "b/best",
+                "--skip-download",
                 "--print", "%(title)s",
-                "-g",
+                "--print", "%(duration>%H:%M:%S)s",
+                "--print", "%(uploader,channel,creator|)s",
                 pageUri.AbsoluteUri
             ],
             cancellationToken).ConfigureAwait(false);
 
-        if (single is { ExitCode: 0 } && single.Lines.Count >= 2)
-        {
-            var title = single.Lines[0].Trim();
-            var url = single.Lines[^1].Trim(); // last line is URL if title had newlines rarely
-            // When --print title then -g: stdout is title\nurl
-            if (single.Lines.Count == 2)
-                url = single.Lines[1].Trim();
-            else
-            {
-                // title may contain newlines; last non-empty line that looks like URL
-                url = single.Lines.LastOrDefault(l => l.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                      ?.Trim() ?? url;
-                title = single.Lines[0].Trim();
-            }
+        if (result is not { ExitCode: 0 } || result.Lines.Count == 0)
+            return null;
 
-            if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ResolvedStream(
-                    pageUri.AbsoluteUri,
-                    string.IsNullOrWhiteSpace(title) ? pageUri.Host : title,
-                    url,
-                    AudioUrl: null,
-                    IsAudioOnly: false);
-            }
+        var title = result.Lines.ElementAtOrDefault(0)?.Trim();
+        var duration = NormalizeDuration(result.Lines.ElementAtOrDefault(1));
+        var uploader = result.Lines.ElementAtOrDefault(2)?.Trim();
+        if (string.IsNullOrWhiteSpace(title) || title is "NA" or "None")
+            return null;
+
+        return new ResolvedStream(
+            pageUri.AbsoluteUri,
+            title,
+            PrimaryUrl: pageUri.AbsoluteUri,
+            AudioUrl: null,
+            IsAudioOnly: false,
+            Duration: duration,
+            Uploader: string.IsNullOrWhiteSpace(uploader) || uploader is "NA" or "None" ? null : uploader);
+    }
+
+    private static ResolvedStream? ParseYtDlpMetaAndUrls(IReadOnlyList<string> rawLines, Uri pageUri)
+    {
+        var lines = rawLines.Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        if (lines.Count == 0)
+            return null;
+
+        var urls = lines.Where(l => l.StartsWith("http", StringComparison.OrdinalIgnoreCase)).ToList();
+        var meta = lines.Where(l => !l.StartsWith("http", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var title = meta.ElementAtOrDefault(0);
+        var duration = NormalizeDuration(meta.ElementAtOrDefault(1));
+        var uploader = meta.ElementAtOrDefault(2);
+        if (string.IsNullOrWhiteSpace(title) || title is "NA" or "None")
+            title = pageUri.Host;
+        if (string.IsNullOrWhiteSpace(uploader) || uploader is "NA" or "None")
+            uploader = null;
+
+        if (urls.Count == 0)
+        {
+            // Meta-only print (no -g lines).
+            return new ResolvedStream(
+                pageUri.AbsoluteUri, title!, pageUri.AbsoluteUri, null, false, duration, uploader);
         }
 
-        // 2) Fallback: separate best video + audio (DASH) — use input-slave for audio.
-        var multi = await RunYtDlpAsync(
-            ytdlp,
-            [
-                "--no-playlist",
-                "--no-warnings",
-                "-f", "bv*+ba/b",
-                "--print", "%(title)s",
-                "-g",
-                pageUri.AbsoluteUri
-            ],
-            cancellationToken).ConfigureAwait(false);
-
-        if (multi is { ExitCode: 0 } && multi.Lines.Count >= 2)
+        if (urls.Count == 1)
         {
-            var lines = multi.Lines.Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
-            var title = lines.FirstOrDefault(l => !l.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                        ?? pageUri.Host;
-            var urls = lines.Where(l => l.StartsWith("http", StringComparison.OrdinalIgnoreCase)).ToList();
-            if (urls.Count == 1)
-            {
-                return new ResolvedStream(pageUri.AbsoluteUri, title, urls[0], null, false);
-            }
-
-            if (urls.Count >= 2)
-            {
-                return new ResolvedStream(
-                    pageUri.AbsoluteUri,
-                    title,
-                    PrimaryUrl: urls[0],
-                    AudioUrl: urls[1],
-                    IsAudioOnly: false);
-            }
+            return new ResolvedStream(
+                pageUri.AbsoluteUri, title!, urls[0], null, false, duration, uploader);
         }
 
-        return null;
+        return new ResolvedStream(
+            pageUri.AbsoluteUri,
+            title!,
+            PrimaryUrl: urls[0],
+            AudioUrl: urls[1],
+            IsAudioOnly: false,
+            Duration: duration,
+            Uploader: uploader);
+    }
+
+    private static string? NormalizeDuration(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || raw is "NA" or "None" or "0")
+            return null;
+        raw = raw.Trim();
+        // yt-dlp may print H:MM:SS or MM:SS
+        if (raw.Count(c => c == ':') == 2 && raw.StartsWith("0:", StringComparison.Ordinal))
+            return raw[2..]; // strip leading 0: hours when under 1h → M:SS still ok; keep H:MM:SS if H>0
+        if (raw.StartsWith("00:", StringComparison.Ordinal) && raw.Length == 8)
+            return raw[3..]; // 00:mm:ss → mm:ss
+        return raw;
     }
 
     private sealed record YtDlpResult(int ExitCode, IReadOnlyList<string> Lines, string StdErr);

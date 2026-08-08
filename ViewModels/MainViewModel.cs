@@ -315,9 +315,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>History write runs after the frame so Play is not blocked by JSON/disk I/O.</summary>
-    private void RecordRecentDeferred(MediaItem item)
+    private void RecordRecentDeferred(MediaItem? item)
     {
-        if (!item.IsPlayable) return;
+        if (item is null || !item.IsPlayable) return;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             _recent.Record(item);
@@ -493,6 +493,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _audio.SetRate((float)PlaybackRate);
             IsPlaying = true;
             StatusMessage = $"正在播放網路音訊：{title}";
+            _ = EnrichDirectNetworkTitleAsync(url, title, _selectGeneration);
             return;
         }
 
@@ -516,6 +517,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _video.SetRate((float)PlaybackRate);
             IsPlaying = true;
             StatusMessage = $"正在播放網路影片：{title}";
+            _ = EnrichDirectNetworkTitleAsync(url, title, generation == 0 ? _selectGeneration : generation);
             return;
         }
 
@@ -586,6 +588,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // Attach video host while yt-dlp runs so HWND is ready when the URL arrives.
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (preferVideo)
+            {
+                ActiveMediaKind = MediaKind.Video;
+                PrepareVideoHost?.Invoke();
+            }
+            StatusMessage = "正在解析網路串流（yt-dlp）…";
+        });
+
         StreamResolver.ResolvedStream? resolved;
         try
         {
@@ -604,8 +617,27 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         var display = string.IsNullOrWhiteSpace(resolved.Title) ? title : resolved.Title;
+        var streamUrl = resolved.PrimaryUrl?.Trim() ?? "";
+        var canPlayDirect = !string.IsNullOrWhiteSpace(streamUrl)
+                            && !string.Equals(streamUrl, resolved.PageUrl, StringComparison.OrdinalIgnoreCase)
+                            && !StreamResolver.NeedsExtraction(streamUrl);
 
-        for (var i = 0; i < 12; i++)
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (generation != _selectGeneration) return;
+            ApplyNetworkMetadata(pageUrl, display, resolved.Duration, resolved.Uploader);
+            RecordRecentDeferred(CurrentMedia ?? Playlist.FirstOrDefault(m =>
+                string.Equals(m.SourceUrl, pageUrl, StringComparison.OrdinalIgnoreCase)));
+        });
+
+        if (!canPlayDirect)
+        {
+            Fail($"已取得標題「{display}」，但無法取得可播放串流（請更新 yt-dlp：yt-dlp -U）。");
+            return;
+        }
+
+        // Longer host attach window — extract can take seconds and layout may lag.
+        for (var i = 0; i < 20; i++)
         {
             if (generation != _selectGeneration)
                 return;
@@ -616,12 +648,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 if (generation != _selectGeneration)
                     return;
 
-                WindowTitle = $"{display} — 多媒體播放器";
+                _video.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
+                _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
 
                 if (preferVideo)
                 {
                     PrepareVideoHost?.Invoke();
-                    if (_video.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: true))
+                    if (_video.PlayDirectUrl(streamUrl, resolved.AudioUrl, requireVideoHost: true, httpReferrer: pageUrl)
+                        || _video.PlayDirectUrl(streamUrl, null, requireVideoHost: true, httpReferrer: pageUrl))
                     {
                         _video.SetRate((float)PlaybackRate);
                         IsPlaying = true;
@@ -630,20 +664,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                         return;
                     }
 
-                    // After a few tries, fall back to audio path.
-                    if (i >= 5 &&
-                        _audio.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: false))
+                    // Host still missing — audio path so user at least hears content.
+                    if (i >= 8 &&
+                        _audio.PlayDirectUrl(streamUrl, resolved.AudioUrl, requireVideoHost: false, httpReferrer: pageUrl))
                     {
                         _video.PrepareForHostTeardown();
                         ActiveMediaKind = MediaKind.Audio;
-                        _audio.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
                         _audio.SetRate((float)PlaybackRate);
                         IsPlaying = true;
                         StatusMessage = $"已以音訊模式播放：{display}";
                         started = true;
                     }
                 }
-                else if (_audio.PlayDirectUrl(resolved.PrimaryUrl, resolved.AudioUrl, requireVideoHost: false))
+                else if (_audio.PlayDirectUrl(streamUrl, resolved.AudioUrl, requireVideoHost: false, httpReferrer: pageUrl)
+                         || _audio.PlayDirectUrl(streamUrl, null, requireVideoHost: false, httpReferrer: pageUrl))
                 {
                     _audio.SetRate((float)PlaybackRate);
                     IsPlaying = true;
@@ -655,11 +689,122 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             if (started)
                 return;
 
-            await Task.Delay(40).ConfigureAwait(false);
+            await Task.Delay(i < 5 ? 50 : 100).ConfigureAwait(false);
         }
 
-        Fail($"無法播放已解析的串流：{display}");
+        Fail($"無法播放已解析的串流：{display}。若為 YouTube，請確認 yt-dlp 可在終端機解析此網址。");
     }
+
+    /// <summary>
+    /// Push resolved title/duration into playlist row, chrome labels, and recent history.
+    /// </summary>
+    private void ApplyNetworkMetadata(string sourceUrl, string title, string? duration = null, string? uploader = null)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return;
+
+        foreach (var m in Playlist)
+        {
+            if (!string.Equals(m.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
+                continue;
+            m.Title = title;
+            if (!string.IsNullOrWhiteSpace(uploader))
+                m.Subtitle = uploader!;
+            if (!string.IsNullOrWhiteSpace(duration))
+                m.Duration = duration!;
+        }
+
+        if (CurrentMedia is not null
+            && string.Equals(CurrentMedia.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            WindowTitle = $"{title} — 多媒體播放器";
+            if (!string.IsNullOrWhiteSpace(duration))
+                DurationText = duration!;
+            StatusDetail = string.Join(" · ",
+                new[] { CurrentMedia.Format, uploader, CurrentMedia.Kind == MediaKind.Video ? "影片" : "音樂" }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        foreach (var r in RecentItems)
+        {
+            if (!string.Equals(r.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
+                continue;
+            r.Title = title;
+            if (!string.IsNullOrWhiteSpace(uploader))
+                r.Subtitle = uploader!;
+            if (!string.IsNullOrWhiteSpace(duration))
+                r.Duration = duration!;
+        }
+
+        foreach (var r in RecentStreamItems)
+        {
+            if (!string.Equals(r.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
+                continue;
+            r.Title = title;
+            if (!string.IsNullOrWhiteSpace(uploader))
+                r.Subtitle = uploader!;
+            if (!string.IsNullOrWhiteSpace(duration))
+                r.Duration = duration!;
+        }
+
+        // Persist updated labels (debounced).
+        _recent.ScheduleSave();
+        _streams.ScheduleSave();
+    }
+
+    /// <summary>For direct media URLs: improve title from path / optional yt-dlp probe.</summary>
+    private async Task EnrichDirectNetworkTitleAsync(string url, string fallbackTitle, int generation)
+    {
+        // Fast local guess from path (song.mp3 → song).
+        string? fromPath = null;
+        if (MediaEngine.TryNormalizeStreamUri(url, out var uri))
+        {
+            var name = Path.GetFileNameWithoutExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(name) && name is not "/" and not ".")
+                fromPath = Uri.UnescapeDataString(name);
+        }
+
+        var host = MediaEngine.TryNormalizeStreamUri(url, out var hostUri) ? hostUri.Host : "";
+        if (!string.IsNullOrWhiteSpace(fromPath)
+            && !string.Equals(fromPath, fallbackTitle, StringComparison.OrdinalIgnoreCase)
+            && (IsPlaceholderNetworkTitle(fallbackTitle)
+                || string.Equals(fallbackTitle, host, StringComparison.OrdinalIgnoreCase)))
+        {
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (generation != _selectGeneration) return;
+                ApplyNetworkMetadata(url, fromPath!);
+            });
+        }
+
+        if (!StreamResolver.IsYtDlpAvailable())
+            return;
+
+        try
+        {
+            var meta = await StreamResolver.FetchTitleAsync(url).ConfigureAwait(false);
+            if (meta is null || string.IsNullOrWhiteSpace(meta.Title))
+                return;
+            if (generation != _selectGeneration)
+                return;
+
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (generation != _selectGeneration) return;
+                ApplyNetworkMetadata(url, meta.Title, meta.Duration, meta.Uploader);
+            });
+        }
+        catch
+        {
+            // Best-effort title enrichment.
+        }
+    }
+
+    private static bool IsPlaceholderNetworkTitle(string title)
+        => string.IsNullOrWhiteSpace(title)
+           || title is "YouTube 影片"
+           || title.Contains("youtube.com", StringComparison.OrdinalIgnoreCase)
+           || title.Contains("youtu.be", StringComparison.OrdinalIgnoreCase);
 
     [RelayCommand]
     private void TogglePlay()
