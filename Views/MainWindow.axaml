@@ -42,6 +42,8 @@
                 <MenuItem Header="開啟檔案…"
                           Command="{Binding OpenMediaCommand}"
                           InputGesture="Ctrl+O" />
+                <MenuItem Header="開啟資料夾…"
+                          Command="{Binding OpenFolderCommand}" />
                 <MenuItem Header="開啟音樂…"
                           Command="{Binding OpenMusicCommand}" />
                 <MenuItem Header="開啟影片…"
@@ -362,6 +364,8 @@
                             <ContextMenu>
                                 <MenuItem Header="新增檔案…"
                                           Command="{Binding QueueMediaCommand}" />
+                                <MenuItem Header="新增資料夾…"
+                                          Command="{Binding QueueFolderCommand}" />
                                 <MenuItem Header="新增網路串流…"
                                           Command="{Binding QueueNetworkUrlCommand}" />
                             </ContextMenu>

@@ -82,6 +82,7 @@ public partial class MainWindow : Window
             return;
 
         vm.PickFilesAsync = PickFilesAsync;
+        vm.PickFolderAsync = PickFolderAsync;
         vm.PrepareVideoHost = PrepareVideoHost;
         vm.RequestFullscreen = EnterFullscreen;
         vm.ExitFullscreen = LeaveFullscreen;
@@ -252,6 +253,16 @@ public partial class MainWindow : Window
         var files = await StorageProvider.OpenFilePickerAsync(options);
         if (files.Count == 0) return null;
         return files[0].TryGetLocalPath();
+    }
+
+    private async Task<string?> PickFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            AllowMultiple = false,
+            Title = "選擇媒體資料夾"
+        });
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
     }
 
     private async Task<string?> PickLyricsFileAsync()

@@ -30,9 +30,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private double _volumeBeforeMute = 1.0;
     private bool _suppressChromeSideEffects;
     private long _lastInfoOverlaySecond = -1;
+    /// <summary>Local video path that owns the current subtitle selection.</summary>
+    private string? _subtitleVideoPath;
 
     /// <summary>Set by the view to open native file pickers.</summary>
     public Func<string, Task<IReadOnlyList<string>>>? PickFilesAsync { get; set; }
+    /// <summary>Set by the view to choose a media folder.</summary>
+    public Func<Task<string?>>? PickFolderAsync { get; set; }
 
     /// <summary>
     /// Called by the view before video Play so LibVLC gets an embedded HWND
@@ -530,6 +534,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private void PlayLocalVideo(string path, string title, int generation = 0)
     {
+        ClearSubtitleForDifferentVideo(path);
         PrepareVideoHost?.Invoke();
         if (_video.Play(path, requireVideoHost: true))
         {
@@ -565,9 +570,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// After a video starts, load a subtitle in this priority order:
-    /// 1. A subtitle that was manually selected by the user (SubtitlePath)
-    /// 2. A sidecar file next to the video with the same stem (.srt / .ass / …)
+    /// After a video starts, load a subtitle belonging to this exact video file.
+    /// A manually selected subtitle is retained only while replaying that same video.
     /// </summary>
     private void ApplySubtitleAfterPlay(string videoPath)
     {
@@ -576,8 +580,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             await Task.Delay(300);
 
-            // Prefer a manually chosen subtitle, otherwise look for a sidecar.
-            var wasManual = HasSubtitle && File.Exists(SubtitlePath);
+            // A newer selection may have started while LibVLC was parsing.
+            if (!string.Equals(CurrentMedia?.FilePath, videoPath, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var belongsToVideo = string.Equals(_subtitleVideoPath, videoPath, StringComparison.OrdinalIgnoreCase);
+            var wasManual = belongsToVideo && HasSubtitle && File.Exists(SubtitlePath);
             var subPath = wasManual
                 ? SubtitlePath
                 : MediaMetadata.FindSidecarSubtitle(videoPath);
@@ -588,12 +596,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 SubtitlePath = subPath;
                 HasSubtitle = true;
+                _subtitleVideoPath = videoPath;
                 // Only show auto-load banner when the subtitle was auto-detected;
                 // manual loads are already announced by OpenSubtitleAsync.
                 if (!wasManual)
                     StatusMessage = $"已自動載入字幕：{Path.GetFileName(subPath)}";
             }
         }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void ClearSubtitleForDifferentVideo(string videoPath)
+    {
+        if (string.Equals(_subtitleVideoPath, videoPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        SubtitlePath = string.Empty;
+        HasSubtitle = false;
+        _video.ClearSubtitles();
     }
 
     private void PlayNetworkAudio(string url, string title)
@@ -1086,6 +1105,59 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task OpenFolderAsync()
+    {
+        var paths = await PickMediaFolderPathsAsync();
+        if (paths.Count > 0)
+            ImportPaths(paths);
+    }
+
+    [RelayCommand]
+    private async Task QueueFolderAsync()
+    {
+        var paths = await PickMediaFolderPathsAsync();
+        if (paths.Count > 0)
+            ImportPaths(paths, selectFirst: false);
+    }
+
+    private async Task<IReadOnlyList<string>> PickMediaFolderPathsAsync()
+    {
+        if (PickFolderAsync is null)
+        {
+            StatusMessage = "資料夾選擇對話框尚未就緒";
+            return Array.Empty<string>();
+        }
+
+        var folder = await PickFolderAsync();
+        if (string.IsNullOrWhiteSpace(folder)) return Array.Empty<string>();
+
+        var paths = await Task.Run(() => FindMediaFiles(folder));
+        if (paths.Count == 0)
+            StatusMessage = "此資料夾及子資料夾沒有支援的媒體檔";
+        return paths;
+    }
+
+    private static IReadOnlyList<string> FindMediaFiles(string folder)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(folder, "*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint
+                })
+                .Where(path => MediaMetadata.IsAudio(path) || MediaMetadata.IsVideo(path))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    [RelayCommand]
     private async Task OpenMusicAsync()
     {
         if (PickFilesAsync is null)
@@ -1135,6 +1207,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         // and remember it for the next PlayLocalVideo() call.
         SubtitlePath = path;
         HasSubtitle = true;
+        _subtitleVideoPath = CurrentMedia?.FilePath;
 
         if (_video.AddSubtitleFile(path))
         {
@@ -1153,6 +1226,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         SubtitlePath = string.Empty;
         HasSubtitle = false;
+        _subtitleVideoPath = null;
         _video.ClearSubtitles();
         StatusMessage = "已關閉字幕";
     }
