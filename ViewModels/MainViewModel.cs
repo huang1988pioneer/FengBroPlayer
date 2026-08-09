@@ -107,6 +107,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool IsPlaylistDock => ActiveDockPane == SideDockPane.Playlist;
     public bool IsRecentDock => ActiveDockPane == SideDockPane.Recent;
     public bool IsStreamDock => ActiveDockPane == SideDockPane.Streams;
+    public string PlaylistPositionText
+    {
+        get
+        {
+            var total = Playlist.Count;
+            if (total == 0) return "0 / 0";
+            var index = IndexOfCurrent();
+            return $"{(index >= 0 ? index + 1 : 0)} / {total}";
+        }
+    }
 
     public MainViewModel()
     {
@@ -118,6 +128,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         HasRecentStreamItems = RecentStreamItems.Count > 0;
         RecentItems.CollectionChanged += (_, _) => HasRecentItems = RecentItems.Count > 0;
         RecentStreamItems.CollectionChanged += (_, _) => HasRecentStreamItems = RecentStreamItems.Count > 0;
+        Playlist.CollectionChanged += (_, _) => OnPropertyChanged(nameof(PlaylistPositionText));
 
         _audio.Volume = (int)(Volume * 100);
         _video.Volume = (int)(Volume * 100);
@@ -229,6 +240,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         for (var i = 0; i < Playlist.Count; i++)
             Playlist[i].Index = i + 1;
+        OnPropertyChanged(nameof(PlaylistPositionText));
     }
 
     private void MarkCurrent(MediaItem? item)
@@ -604,6 +616,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
+
+    partial void OnCurrentMediaChanged(MediaItem? value)
+        => OnPropertyChanged(nameof(PlaylistPositionText));
 
     private void ClearSubtitleForDifferentVideo(string videoPath)
     {

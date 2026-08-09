@@ -329,6 +329,12 @@
                                        VerticalAlignment="Center" />
                             <ToggleSwitch Classes="autoplay"
                                           IsChecked="{Binding AutoPlay}" />
+                            <TextBlock Text="{Binding PlaylistPositionText}"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="目前播放項目 / 播放清單總數" />
                         </StackPanel>
                         <TextBlock IsVisible="{Binding IsRecentDock}"
                                    Text="最多 50 筆，重開仍可讀取"
