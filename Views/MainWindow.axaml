@@ -279,6 +279,7 @@
                                         Margin="0,8,0,0"
                                         IsVisible="{Binding CurrentMedia, Converter={x:Static ObjectConverters.IsNull}}">
                                 <Button Classes="chip" Command="{Binding OpenMediaCommand}" Content="開啟檔案" />
+                                <Button Classes="chip" Command="{Binding OpenFolderCommand}" Content="開啟資料夾" />
                                 <Button Classes="chip" Command="{Binding OpenNetworkUrlCommand}" Content="開啟網路串流" />
                             </StackPanel>
                         </StackPanel>
