@@ -1074,7 +1074,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Deletes local files after the view has obtained the user's confirmation.</summary>
-    public async Task DeleteLocalMediaAsync(IEnumerable<MediaItem> items)
+    public Task DeleteLocalMediaAsync(IEnumerable<MediaItem> items)
     {
         var candidates = items
             .Where(item => item.IsLocalFile
@@ -1083,7 +1083,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .Distinct()
             .ToList();
         if (candidates.Count == 0)
-            return;
+            return Task.CompletedTask;
 
         var currentWasSelected = candidates.Any(item => ReferenceEquals(CurrentMedia, item));
         var shouldContinuePlayback = currentWasSelected && IsPlaying;
@@ -1093,14 +1093,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             : null;
         if (currentWasSelected)
         {
-            // Stop only the active player, then wait for LibVLC's asynchronous
-            // shutdown before opening another media source on that same engine.
+            // Do not stop the active LibVLC player here.  A Stop followed by an
+            // immediate Play can leave its Windows audio output silent until a
+            // later manual selection.  SelectMedia uses MediaEngine's tested
+            // soft hand-off (pause + replace media), which keeps that pipeline
+            // alive while moving to the next playlist item.
             IsPlaying = false;
             Progress = 0;
             PositionText = "00:00";
             UpdateCurrentLyric(0);
-            if (ActiveEngine is not null)
-                await ActiveEngine.StopAndWaitAsync();
         }
 
         var deleted = 0;
@@ -1136,6 +1137,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             StatusMessage = deleted == 1 ? "已刪除 1 個檔案" : $"已刪除 {deleted} 個檔案";
         else
             StatusMessage = $"已刪除 {deleted} 個檔案，{failed} 個檔案無法刪除";
+
+        return Task.CompletedTask;
     }
 
     private MediaItem? FindNextRemainingPlayable(int fromIndex, IReadOnlyCollection<MediaItem> excluded)
