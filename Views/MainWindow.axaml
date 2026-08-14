@@ -363,7 +363,7 @@
                              Classes="playlist"
                              IsVisible="{Binding IsPlaylistDock}"
                              ItemsSource="{Binding Playlist}"
-                             SelectedItem="{Binding CurrentMedia, Mode=OneWay}"
+                             SelectionMode="Multiple"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              Background="Transparent"
                              BorderThickness="0"

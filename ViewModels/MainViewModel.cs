@@ -1073,33 +1073,47 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         return -1;
     }
 
-    /// <summary>Deletes a local file after the view has obtained the user's confirmation.</summary>
-    public void DeleteLocalMedia(MediaItem item)
+    /// <summary>Deletes local files after the view has obtained the user's confirmation.</summary>
+    public void DeleteLocalMedia(IEnumerable<MediaItem> items)
     {
-        if (!item.IsLocalFile || string.IsNullOrWhiteSpace(item.FilePath) || !Playlist.Contains(item))
+        var candidates = items
+            .Where(item => item.IsLocalFile
+                           && !string.IsNullOrWhiteSpace(item.FilePath)
+                           && Playlist.Contains(item))
+            .Distinct()
+            .ToList();
+        if (candidates.Count == 0)
             return;
 
-        var path = item.FilePath;
-        var wasCurrent = ReferenceEquals(CurrentMedia, item);
-        if (wasCurrent)
+        var currentWasSelected = candidates.Any(item => ReferenceEquals(CurrentMedia, item));
+        if (currentWasSelected)
             StopMedia(); // Release LibVLC's handle before attempting File.Delete.
 
-        try
+        var deleted = 0;
+        var failed = 0;
+        foreach (var item in candidates)
         {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            StatusMessage = $"無法刪除檔案：{ex.Message}";
-            return;
+            try
+            {
+                if (File.Exists(item.FilePath!))
+                    File.Delete(item.FilePath!);
+                Playlist.Remove(item);
+                deleted++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed++;
+                StatusMessage = $"無法刪除檔案：{ex.Message}";
+            }
         }
 
-        Playlist.Remove(item);
-        if (wasCurrent)
+        if (currentWasSelected && !Playlist.Contains(CurrentMedia!))
             MarkCurrent(null);
         ReindexPlaylist();
-        StatusMessage = $"已刪除檔案：{Path.GetFileName(path)}";
+        if (failed == 0)
+            StatusMessage = deleted == 1 ? "已刪除 1 個檔案" : $"已刪除 {deleted} 個檔案";
+        else
+            StatusMessage = $"已刪除 {deleted} 個檔案，{failed} 個檔案無法刪除";
     }
 
     /// <summary>

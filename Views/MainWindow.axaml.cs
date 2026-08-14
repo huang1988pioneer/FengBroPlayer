@@ -500,7 +500,14 @@ public partial class MainWindow : Window
                 // file deletion while the video surface or another control is active.
                 if (PlaylistList.IsKeyboardFocusWithin)
                 {
-                    _ = ConfirmDeleteCurrentMediaAsync(vm);
+                    var selectedItems = PlaylistList.SelectedItems?
+                        .OfType<MediaItem>()
+                        .Where(item => item.IsLocalFile && !string.IsNullOrWhiteSpace(item.FilePath))
+                        .ToList() ?? [];
+                    if (selectedItems.Count == 0 && vm.CurrentMedia is { IsLocalFile: true } current)
+                        selectedItems.Add(current);
+
+                    _ = ConfirmDeleteMediaAsync(vm, selectedItems);
                     e.Handled = true;
                 }
                 break;
@@ -554,17 +561,23 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task ConfirmDeleteCurrentMediaAsync(MainViewModel vm)
+    private async Task ConfirmDeleteMediaAsync(MainViewModel vm, IReadOnlyList<MediaItem> items)
     {
-        var item = vm.CurrentMedia;
-        if (item is not { IsLocalFile: true } || string.IsNullOrWhiteSpace(item.FilePath))
+        if (items.Count == 0)
             return;
+
+        var isBatch = items.Count > 1;
+        var title = isBatch ? $"確認刪除 {items.Count} 個檔案" : "確認刪除檔案";
+        var detail = isBatch
+            ? string.Join(Environment.NewLine, items.Take(3).Select(item => item.Title))
+                + (items.Count > 3 ? $"{Environment.NewLine}…以及其他 {items.Count - 3} 個檔案" : "")
+            : items[0].FilePath;
 
         var dialog = new Window
         {
-            Title = "確認刪除檔案",
+            Title = title,
             Width = 500,
-            Height = 210,
+            Height = isBatch ? 250 : 210,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = Background
@@ -601,13 +614,15 @@ public partial class MainWindow : Window
             Spacing = 12,
             Children =
             {
-                new TextBlock { Text = "要刪除此檔案嗎？", FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold },
-                new TextBlock { Text = item.Title, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis },
+                new TextBlock { Text = isBatch ? $"要刪除選取的 {items.Count} 個檔案嗎？" : "要刪除此檔案嗎？", FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold },
+                new TextBlock { Text = isBatch ? "此操作會永久刪除下列檔案：" : items[0].Title, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis },
                 new TextBlock
                 {
-                    Text = item.FilePath,
+                    Text = detail,
                     Classes = { "muted" },
                     FontSize = 11,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                    MaxHeight = 64,
                     TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis
                 },
                 new StackPanel
@@ -622,7 +637,7 @@ public partial class MainWindow : Window
 
         await dialog.ShowDialog(this);
         if (confirmed)
-            vm.DeleteLocalMedia(item);
+            vm.DeleteLocalMedia(items);
     }
 
     private void OnAudioStagePointerPressed(object? sender, PointerPressedEventArgs e)
