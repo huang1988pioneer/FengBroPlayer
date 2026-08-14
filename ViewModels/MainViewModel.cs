@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LibVLCSharp.Shared;
+using MusicVideoMediaPlayer.Helpers;
 using MusicVideoMediaPlayer.Models;
 using MusicVideoMediaPlayer.Services;
 
@@ -54,7 +56,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public Func<Task<string?>>? PickSubtitleAsync { get; set; }
     public Func<Task<string?>>? PickLyricsAsync { get; set; }
 
-    public ObservableCollection<MediaItem> Playlist { get; } = [];
+    public BulkObservableCollection<MediaItem> Playlist { get; } = [];
     public ObservableCollection<RecentPlayEntry> RecentItems => _recent.Items;
     public ObservableCollection<RecentPlayEntry> RecentStreamItems => _streams.Items;
     public ObservableCollection<double> WaveformBars { get; } = [];
@@ -1074,7 +1076,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Deletes local files after the view has obtained the user's confirmation.</summary>
-    public Task DeleteLocalMediaAsync(IEnumerable<MediaItem> items)
+    public async Task DeleteLocalMediaAsync(IEnumerable<MediaItem> items)
     {
         var candidates = items
             .Where(item => item.IsLocalFile
@@ -1083,50 +1085,50 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .Distinct()
             .ToList();
         if (candidates.Count == 0)
-            return Task.CompletedTask;
+            return;
 
-        var currentWasSelected = candidates.Any(item => ReferenceEquals(CurrentMedia, item));
+        var selectedMedia = CurrentMedia;
+        var currentWasSelected = candidates.Any(item => ReferenceEquals(selectedMedia, item));
         var shouldContinuePlayback = currentWasSelected && IsPlaying;
         var currentIndex = IndexOfCurrent();
         var nextPlayable = currentWasSelected
             ? FindNextRemainingPlayable(currentIndex, candidates)
             : null;
-        if (currentWasSelected)
-        {
-            // Do not stop the active LibVLC player here.  A Stop followed by an
-            // immediate Play can leave its Windows audio output silent until a
-            // later manual selection.  SelectMedia uses MediaEngine's tested
-            // soft hand-off (pause + replace media), which keeps that pipeline
-            // alive while moving to the next playlist item.
-            IsPlaying = false;
-            Progress = 0;
-            PositionText = "00:00";
-            UpdateCurrentLyric(0);
-        }
 
-        var deleted = 0;
-        var failed = 0;
-        foreach (var item in candidates)
+        // Physical deletion may block on antivirus, network-backed folders, or a
+        // busy drive. Keep that work away from Avalonia's UI thread.
+        var outcomes = await Task.Run(() => candidates.Select(item =>
         {
             try
             {
                 if (File.Exists(item.FilePath!))
                     File.Delete(item.FilePath!);
-                Playlist.Remove(item);
-                deleted++;
+                return (Item: item, Error: (Exception?)null);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                failed++;
-                StatusMessage = $"無法刪除檔案：{ex.Message}";
+                return (Item: item, Error: (Exception?)ex);
             }
-        }
+        }).ToList());
 
-        var currentWasDeleted = currentWasSelected && CurrentMedia is not null && !Playlist.Contains(CurrentMedia);
-        if (currentWasDeleted)
+        var deletedItems = outcomes.Where(result => result.Error is null).Select(result => result.Item).ToList();
+        var failures = outcomes.Where(result => result.Error is not null).ToList();
+        var deleted = Playlist.RemoveRange(deletedItems);
+        var failed = failures.Count;
+
+        var currentWasDeleted = currentWasSelected && selectedMedia is not null && deletedItems.Contains(selectedMedia);
+        var selectionIsUnchanged = ReferenceEquals(CurrentMedia, selectedMedia);
+        if (currentWasDeleted && selectionIsUnchanged)
+        {
+            IsPlaying = false;
+            Progress = 0;
+            PositionText = "00:00";
+            UpdateCurrentLyric(0);
             MarkCurrent(null);
+        }
         ReindexPlaylist();
-        if (shouldContinuePlayback && currentWasDeleted && nextPlayable is not null)
+        if (shouldContinuePlayback && currentWasDeleted && selectionIsUnchanged
+            && nextPlayable is not null && Playlist.Contains(nextPlayable))
         {
             // Re-enter through the ordinary selection path so the receiving engine
             // restores volume, unmutes itself, and creates a fresh audio pipeline.
@@ -1136,9 +1138,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         else if (failed == 0)
             StatusMessage = deleted == 1 ? "已刪除 1 個檔案" : $"已刪除 {deleted} 個檔案";
         else
-            StatusMessage = $"已刪除 {deleted} 個檔案，{failed} 個檔案無法刪除";
-
-        return Task.CompletedTask;
+            StatusMessage = $"已刪除 {deleted} 個檔案，{failed} 個檔案無法刪除：{failures[^1].Error!.Message}";
     }
 
     private MediaItem? FindNextRemainingPlayable(int fromIndex, IReadOnlyCollection<MediaItem> excluded)
@@ -1216,6 +1216,54 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         var paths = await PickMediaFolderPathsAsync();
         if (paths.Count > 0)
             ImportPaths(paths, selectFirst: false);
+    }
+
+    [RelayCommand]
+    private void RevealInFileManager(MediaItem? item)
+    {
+        if (item is not { IsLocalFile: true, FilePath: { Length: > 0 } path })
+        {
+            StatusMessage = "網路串流沒有對應的本機檔案";
+            return;
+        }
+
+        if (!File.Exists(path))
+        {
+            StatusMessage = $"找不到檔案：{Path.GetFileName(path)}";
+            return;
+        }
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                var startInfo = new ProcessStartInfo { FileName = "open", UseShellExecute = false };
+                startInfo.ArgumentList.Add("-R");
+                startInfo.ArgumentList.Add(path);
+                Process.Start(startInfo);
+            }
+            else
+            {
+                var startInfo = new ProcessStartInfo { FileName = "xdg-open", UseShellExecute = false };
+                startInfo.ArgumentList.Add(Path.GetDirectoryName(path)!);
+                Process.Start(startInfo);
+            }
+
+            StatusMessage = $"已在檔案總管中顯示：{item.Title}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"無法開啟檔案總管：{ex.Message}";
+        }
     }
 
     private async Task<IReadOnlyList<string>> PickMediaFolderPathsAsync()

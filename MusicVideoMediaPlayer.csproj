@@ -14,8 +14,11 @@
   <!-- Nested probe project; must not be compiled into the main app. -->
   <ItemGroup>
     <Compile Remove="_vlc_probe\**" />
+    <Compile Remove="tests\**" />
     <None Remove="_vlc_probe\**" />
+    <None Remove="tests\**" />
     <EmbeddedResource Remove="_vlc_probe\**" />
+    <EmbeddedResource Remove="tests\**" />
   </ItemGroup>
 
   <ItemGroup>

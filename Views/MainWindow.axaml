@@ -386,6 +386,12 @@
                                         CommandParameter="{Binding}"
                                         Margin="0,1"
                                         HorizontalAlignment="Stretch">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="在檔案總管中顯示"
+                                                      Click="OnRevealPlaylistFileClick" />
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
                                     <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding Index}"

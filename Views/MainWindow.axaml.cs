@@ -677,6 +677,17 @@ public partial class MainWindow : Window
         // SelectMediaCommand exactly once for an ordinary left click.
     }
 
+    private void OnRevealPlaylistFileClick(object? sender, RoutedEventArgs e)
+    {
+        var menu = sender as MenuItem;
+        var row = menu?.Parent as ContextMenu is { PlacementTarget: Control target }
+            ? target.FindAncestorOfType<Button>(includeSelf: true)
+            : null;
+
+        if (row?.DataContext is MediaItem item && DataContext is MainViewModel vm)
+            vm.RevealInFileManagerCommand.Execute(item);
+    }
+
     private void SetPlaylistDeletionSelection(IEnumerable<MediaItem> items)
     {
         foreach (var item in _playlistDeletionSelection)
