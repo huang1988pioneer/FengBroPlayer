@@ -41,4 +41,8 @@ public partial class MediaItem : ObservableObject
 
     [ObservableProperty]
     public partial bool IsCurrent { get; set; }
+
+    /// <summary>Transient playlist selection used for batch file deletion.</summary>
+    [ObservableProperty]
+    public partial bool IsMarkedForDeletion { get; set; }
 }

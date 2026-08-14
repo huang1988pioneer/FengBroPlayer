@@ -363,7 +363,6 @@
                              Classes="playlist"
                              IsVisible="{Binding IsPlaylistDock}"
                              ItemsSource="{Binding Playlist}"
-                             SelectionMode="Multiple"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              Background="Transparent"
                              BorderThickness="0"
@@ -382,9 +381,11 @@
                             <DataTemplate x:DataType="models:MediaItem">
                                 <Button Classes="playlist-row"
                                         Classes.current="{Binding IsCurrent}"
+                                        Classes.delete-selected="{Binding IsMarkedForDeletion}"
+                                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectMediaCommand}"
+                                        CommandParameter="{Binding}"
                                         Margin="0,1"
-                                        HorizontalAlignment="Stretch"
-                                        PointerPressed="OnPlaylistRowPointerPressed">
+                                        HorizontalAlignment="Stretch">
                                     <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding Index}"

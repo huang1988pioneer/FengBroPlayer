@@ -1074,7 +1074,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Deletes local files after the view has obtained the user's confirmation.</summary>
-    public void DeleteLocalMedia(IEnumerable<MediaItem> items)
+    public async Task DeleteLocalMediaAsync(IEnumerable<MediaItem> items)
     {
         var candidates = items
             .Where(item => item.IsLocalFile
@@ -1092,7 +1092,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ? FindNextRemainingPlayable(currentIndex, candidates)
             : null;
         if (currentWasSelected)
-            StopMedia(); // Release LibVLC's handle before attempting File.Delete.
+        {
+            // Stop only the active player, then wait for LibVLC's asynchronous
+            // shutdown before opening another media source on that same engine.
+            IsPlaying = false;
+            Progress = 0;
+            PositionText = "00:00";
+            UpdateCurrentLyric(0);
+            if (ActiveEngine is not null)
+                await ActiveEngine.StopAndWaitAsync();
+        }
 
         var deleted = 0;
         var failed = 0;

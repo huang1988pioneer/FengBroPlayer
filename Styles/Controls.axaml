@@ -128,6 +128,9 @@
     <Style Selector="Button.playlist-row.current">
         <Setter Property="Background" Value="{StaticResource BgSelectedBrush}" />
     </Style>
+    <Style Selector="Button.playlist-row.delete-selected">
+        <Setter Property="Background" Value="{StaticResource BgSelectedBrush}" />
+    </Style>
 
     <Style Selector="Border.control-bar">
         <Setter Property="Background" Value="{StaticResource BgControlBarBrush}" />

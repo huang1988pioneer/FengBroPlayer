@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using MusicVideoMediaPlayer.Models;
 using MusicVideoMediaPlayer.Services;
 using MusicVideoMediaPlayer.ViewModels;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
     private bool _applyingWindowState;
     private int _playlistSelectionAnchor = -1;
+    private readonly HashSet<MediaItem> _playlistDeletionSelection = [];
 
     public MainWindow()
     {
@@ -62,6 +64,11 @@ public partial class MainWindow : Window
         // Handle Tab before Avalonia's normal focus navigation. The XAML bubble
         // handler was too late, so Tab still moved focus like a standard window.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        // Button consumes PointerPressed before bubbling handlers can observe it.
+        // Select the row in the tunnel, then let Button.Command perform playback.
+        PlaylistList.AddHandler(PointerPressedEvent, OnPlaylistRowPointerPressed,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // Slider marks pointer events Handled on the thumb/track; XAML handlers miss them
         // unless we subscribe with handledEventsToo. Without BeginSeek, Progress snaps back
@@ -497,17 +504,14 @@ public partial class MainWindow : Window
         switch (e.Key)
         {
             case Key.Delete:
-                // Only let Delete act on a playlist row. This prevents accidental
-                // file deletion while the video surface or another control is active.
-                if (PlaylistList.IsKeyboardFocusWithin)
+                // Playlist rows are buttons and do not reliably transfer keyboard
+                // focus to the ListBox. A marked selection is the safe, explicit
+                // prerequisite for deletion instead of focus ownership.
+                var selectedItems = _playlistDeletionSelection
+                    .Where(item => item.IsLocalFile && !string.IsNullOrWhiteSpace(item.FilePath))
+                    .ToList();
+                if (selectedItems.Count > 0)
                 {
-                    var selectedItems = PlaylistList.SelectedItems?
-                        .OfType<MediaItem>()
-                        .Where(item => item.IsLocalFile && !string.IsNullOrWhiteSpace(item.FilePath))
-                        .ToList() ?? [];
-                    if (selectedItems.Count == 0 && vm.CurrentMedia is { IsLocalFile: true } current)
-                        selectedItems.Add(current);
-
                     _ = ConfirmDeleteMediaAsync(vm, selectedItems);
                     e.Handled = true;
                 }
@@ -638,39 +642,52 @@ public partial class MainWindow : Window
 
         await dialog.ShowDialog(this);
         if (confirmed)
-            vm.DeleteLocalMedia(items);
+        {
+            await vm.DeleteLocalMediaAsync(items);
+            SetPlaylistDeletionSelection([]);
+        }
     }
 
     private void OnPlaylistRowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not Button { DataContext: MediaItem item }
+        var row = (e.Source as Control)?.FindAncestorOfType<Button>(includeSelf: true);
+        if (row is not { DataContext: MediaItem item }
             || DataContext is not MainViewModel vm
-            || !e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed)
+            || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
             return;
 
-        var selectedItems = PlaylistList.SelectedItems;
         var itemIndex = vm.Playlist.IndexOf(item);
-        if (selectedItems is null || itemIndex < 0)
+        if (itemIndex < 0)
             return;
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _playlistSelectionAnchor >= 0)
         {
             var start = Math.Min(_playlistSelectionAnchor, itemIndex);
             var end = Math.Max(_playlistSelectionAnchor, itemIndex);
-            selectedItems.Clear();
-            for (var index = start; index <= end; index++)
-                selectedItems.Add(vm.Playlist[index]);
+            SetPlaylistDeletionSelection(vm.Playlist.Skip(start).Take(end - start + 1));
 
             // Range selection is a selection action, never a playback action.
             e.Handled = true;
             return;
         }
 
-        selectedItems.Clear();
-        selectedItems.Add(item);
+        SetPlaylistDeletionSelection([item]);
         _playlistSelectionAnchor = itemIndex;
-        vm.SelectMediaCommand.Execute(item);
-        e.Handled = true;
+        // Leave the event unhandled so Button raises Click and executes
+        // SelectMediaCommand exactly once for an ordinary left click.
+    }
+
+    private void SetPlaylistDeletionSelection(IEnumerable<MediaItem> items)
+    {
+        foreach (var item in _playlistDeletionSelection)
+            item.IsMarkedForDeletion = false;
+
+        _playlistDeletionSelection.Clear();
+        foreach (var item in items.Distinct())
+        {
+            item.IsMarkedForDeletion = true;
+            _playlistDeletionSelection.Add(item);
+        }
     }
 
     private void OnAudioStagePointerPressed(object? sender, PointerPressedEventArgs e)

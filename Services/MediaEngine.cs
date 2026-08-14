@@ -385,6 +385,20 @@ public sealed class MediaEngine : IDisposable
         }
     }
 
+    /// <summary>Stops active playback and waits briefly for LibVLC to release media handles.</summary>
+    public async Task StopAndWaitAsync(int timeoutMs = 1200)
+    {
+        StopIfActive();
+        var started = Environment.TickCount64;
+        while (Environment.TickCount64 - started < timeoutMs)
+        {
+            var state = Player.State;
+            if (state is VLCState.NothingSpecial or VLCState.Stopped or VLCState.Error)
+                return;
+            await Task.Delay(25);
+        }
+    }
+
     /// <summary>
     /// Mute + pause the inactive engine. Never Stop() — it freezes the UI thread on Windows.
     /// </summary>
