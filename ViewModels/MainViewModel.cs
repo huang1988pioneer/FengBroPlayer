@@ -1086,6 +1086,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
 
         var currentWasSelected = candidates.Any(item => ReferenceEquals(CurrentMedia, item));
+        var shouldContinuePlayback = currentWasSelected && IsPlaying;
+        var currentIndex = IndexOfCurrent();
+        var nextPlayable = currentWasSelected
+            ? FindNextRemainingPlayable(currentIndex, candidates)
+            : null;
         if (currentWasSelected)
             StopMedia(); // Release LibVLC's handle before attempting File.Delete.
 
@@ -1107,13 +1112,36 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             }
         }
 
-        if (currentWasSelected && !Playlist.Contains(CurrentMedia!))
+        var currentWasDeleted = currentWasSelected && CurrentMedia is not null && !Playlist.Contains(CurrentMedia);
+        if (currentWasDeleted)
             MarkCurrent(null);
         ReindexPlaylist();
-        if (failed == 0)
+        if (shouldContinuePlayback && currentWasDeleted && nextPlayable is not null)
+        {
+            // Re-enter through the ordinary selection path so the receiving engine
+            // restores volume, unmutes itself, and creates a fresh audio pipeline.
+            SelectMedia(nextPlayable);
+            StatusMessage = $"已刪除 {deleted} 個檔案，繼續播放：{nextPlayable.Title}";
+        }
+        else if (failed == 0)
             StatusMessage = deleted == 1 ? "已刪除 1 個檔案" : $"已刪除 {deleted} 個檔案";
         else
             StatusMessage = $"已刪除 {deleted} 個檔案，{failed} 個檔案無法刪除";
+    }
+
+    private MediaItem? FindNextRemainingPlayable(int fromIndex, IReadOnlyCollection<MediaItem> excluded)
+    {
+        if (Playlist.Count == 0) return null;
+        if (fromIndex < 0) fromIndex = 0;
+
+        for (var step = 1; step <= Playlist.Count; step++)
+        {
+            var index = (fromIndex + step) % Playlist.Count;
+            var item = Playlist[index];
+            if (!excluded.Contains(item) && item.IsPlayable)
+                return item;
+        }
+        return null;
     }
 
     /// <summary>

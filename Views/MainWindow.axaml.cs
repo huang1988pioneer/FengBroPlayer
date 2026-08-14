@@ -50,6 +50,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _fsHideTimer;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
     private bool _applyingWindowState;
+    private int _playlistSelectionAnchor = -1;
 
     public MainWindow()
     {
@@ -638,6 +639,38 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
         if (confirmed)
             vm.DeleteLocalMedia(items);
+    }
+
+    private void OnPlaylistRowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Button { DataContext: MediaItem item }
+            || DataContext is not MainViewModel vm
+            || !e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed)
+            return;
+
+        var selectedItems = PlaylistList.SelectedItems;
+        var itemIndex = vm.Playlist.IndexOf(item);
+        if (selectedItems is null || itemIndex < 0)
+            return;
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _playlistSelectionAnchor >= 0)
+        {
+            var start = Math.Min(_playlistSelectionAnchor, itemIndex);
+            var end = Math.Max(_playlistSelectionAnchor, itemIndex);
+            selectedItems.Clear();
+            for (var index = start; index <= end; index++)
+                selectedItems.Add(vm.Playlist[index]);
+
+            // Range selection is a selection action, never a playback action.
+            e.Handled = true;
+            return;
+        }
+
+        selectedItems.Clear();
+        selectedItems.Add(item);
+        _playlistSelectionAnchor = itemIndex;
+        vm.SelectMediaCommand.Execute(item);
+        e.Handled = true;
     }
 
     private void OnAudioStagePointerPressed(object? sender, PointerPressedEventArgs e)

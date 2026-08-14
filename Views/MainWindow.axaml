@@ -382,10 +382,9 @@
                             <DataTemplate x:DataType="models:MediaItem">
                                 <Button Classes="playlist-row"
                                         Classes.current="{Binding IsCurrent}"
-                                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectMediaCommand}"
-                                        CommandParameter="{Binding}"
                                         Margin="0,1"
-                                        HorizontalAlignment="Stretch">
+                                        HorizontalAlignment="Stretch"
+                                        PointerPressed="OnPlaylistRowPointerPressed">
                                     <Grid ColumnDefinitions="28,*,Auto" ColumnSpacing="8">
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding Index}"
