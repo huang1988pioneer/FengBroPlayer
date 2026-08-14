@@ -1073,6 +1073,35 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         return -1;
     }
 
+    /// <summary>Deletes a local file after the view has obtained the user's confirmation.</summary>
+    public void DeleteLocalMedia(MediaItem item)
+    {
+        if (!item.IsLocalFile || string.IsNullOrWhiteSpace(item.FilePath) || !Playlist.Contains(item))
+            return;
+
+        var path = item.FilePath;
+        var wasCurrent = ReferenceEquals(CurrentMedia, item);
+        if (wasCurrent)
+            StopMedia(); // Release LibVLC's handle before attempting File.Delete.
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"無法刪除檔案：{ex.Message}";
+            return;
+        }
+
+        Playlist.Remove(item);
+        if (wasCurrent)
+            MarkCurrent(null);
+        ReindexPlaylist();
+        StatusMessage = $"已刪除檔案：{Path.GetFileName(path)}";
+    }
+
     /// <summary>
     /// Scan playlist for next/prev playable item. direction: +1 or -1.
     /// fromIndex = starting index (exclusive for step). Wrap once.

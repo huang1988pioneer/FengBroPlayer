@@ -495,6 +495,15 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
+            case Key.Delete:
+                // Only let Delete act on a playlist row. This prevents accidental
+                // file deletion while the video surface or another control is active.
+                if (PlaylistList.IsKeyboardFocusWithin)
+                {
+                    _ = ConfirmDeleteCurrentMediaAsync(vm);
+                    e.Handled = true;
+                }
+                break;
             case Key.Space:
                 vm.TogglePlayCommand.Execute(null);
                 e.Handled = true;
@@ -543,6 +552,77 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    private async Task ConfirmDeleteCurrentMediaAsync(MainViewModel vm)
+    {
+        var item = vm.CurrentMedia;
+        if (item is not { IsLocalFile: true } || string.IsNullOrWhiteSpace(item.FilePath))
+            return;
+
+        var dialog = new Window
+        {
+            Title = "確認刪除檔案",
+            Width = 500,
+            Height = 210,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Background
+        };
+
+        var confirmed = false;
+        void Close(bool shouldDelete)
+        {
+            confirmed = shouldDelete;
+            dialog.Close();
+        }
+
+        var deleteButton = new Button
+        {
+            Content = "刪除",
+            MinWidth = 84,
+            IsDefault = true,
+            Classes = { "chip" }
+        };
+        deleteButton.Click += (_, _) => Close(true);
+
+        var cancelButton = new Button
+        {
+            Content = "取消",
+            MinWidth = 84,
+            IsCancel = true,
+            Classes = { "ghost" }
+        };
+        cancelButton.Click += (_, _) => Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock { Text = "要刪除此檔案嗎？", FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold },
+                new TextBlock { Text = item.Title, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis },
+                new TextBlock
+                {
+                    Text = item.FilePath,
+                    Classes = { "muted" },
+                    FontSize = 11,
+                    TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { cancelButton, deleteButton }
+                }
+            }
+        };
+
+        await dialog.ShowDialog(this);
+        if (confirmed)
+            vm.DeleteLocalMedia(item);
     }
 
     private void OnAudioStagePointerPressed(object? sender, PointerPressedEventArgs e)

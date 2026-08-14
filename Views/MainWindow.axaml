@@ -357,7 +357,8 @@
                     </Grid>
 
                     <!-- Playlist -->
-                    <ListBox Grid.Row="2"
+                    <ListBox x:Name="PlaylistList"
+                             Grid.Row="2"
                              Margin="4,0,4,8"
                              Classes="playlist"
                              IsVisible="{Binding IsPlaylistDock}"
