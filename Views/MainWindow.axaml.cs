@@ -58,6 +58,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Opened += OnOpened;
+        Closing += OnClosing;
         Closed += OnClosed;
         AddHandler(DragDrop.DropEvent, OnDrop);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
@@ -206,14 +207,40 @@ public partial class MainWindow : Window
         RestartFullscreenHideTimer();
     }
 
+    private bool _playbackShutdown;
+
+    /// <summary>
+    /// Stop LibVLC and detach HWND before Avalonia destroys the native video host.
+    /// Destroying that child window while Direct3D still owns it is what leaves
+    /// the desktop stuttering after this app's window is already gone.
+    /// </summary>
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_playbackShutdown)
+            return;
+        _playbackShutdown = true;
+        Program.StartExitWatchdog();
+        ShutdownPlayback();
+    }
+
     private void OnClosed(object? sender, EventArgs e)
+    {
+        _fsHideTimer.Stop();
+        ShutdownPlayback();
+    }
+
+    private void ShutdownPlayback()
     {
         _fsHideTimer.Stop();
         if (DataContext is MainViewModel vm)
         {
             vm.PropertyChanged -= OnViewModelPropertyChanged;
-            vm.Dispose();
+            try { vm.Dispose(); }
+            catch { /* native teardown must continue */ }
         }
+
+        try { VideoHost.MediaPlayer = null; }
+        catch { /* player already disposed */ }
     }
 
     private async Task<IReadOnlyList<string>> PickFilesAsync(string kind)

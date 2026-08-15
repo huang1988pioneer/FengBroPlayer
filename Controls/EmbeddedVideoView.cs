@@ -91,8 +91,9 @@ public sealed class EmbeddedVideoView : NativeControlHost
 
     protected override void DestroyNativeControlCore(IPlatformHandle control)
     {
-        // Only clear Hwnd — never Stop() here. Stop() on the UI thread during window
-        // teardown or layout changes is a known hard freeze with LibVLC on Windows.
+        // Never Stop() here. Stop() on the UI thread during layout is a known
+        // LibVLC freeze. Window close stops the player first (MainWindow.Closing)
+        // so this path should only see a detached or already-stopped player.
         if (MediaPlayer is not null)
         {
             try

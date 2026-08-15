@@ -3,6 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace MusicVideoMediaPlayer;
 
@@ -20,6 +21,28 @@ sealed class Program
             return;
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // LibVLC decoder / vout threads are native and can keep this process
+        // alive after the window is gone. A leftover player process holds the
+        // GPU and audio stack, so the whole desktop stutters.
+        Environment.Exit(0);
+    }
+
+    /// <summary>
+    /// If LibVLC stop/dispose hangs, still terminate so Windows can reclaim D3D/WASAPI.
+    /// </summary>
+    internal static void StartExitWatchdog(int timeoutMs = 8000)
+    {
+        var thread = new Thread(() =>
+        {
+            try { Thread.Sleep(timeoutMs); }
+            catch { /* ignore */ }
+            Environment.Exit(0);
+        })
+        {
+            IsBackground = true,
+            Name = "LibVlcExitWatchdog"
+        };
+        thread.Start();
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

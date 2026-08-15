@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,6 +21,26 @@ public static class StreamResolver
     {
         PropertyNameCaseInsensitive = true
     };
+
+    private static readonly ConcurrentDictionary<int, Process> OutstandingProcesses = new();
+
+    /// <summary>Kill yt-dlp children started by this process (window close / dispose).</summary>
+    public static void KillOutstandingProcesses()
+    {
+        foreach (var pair in OutstandingProcesses.ToArray())
+        {
+            try
+            {
+                if (!pair.Value.HasExited)
+                    pair.Value.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Process already gone.
+            }
+            OutstandingProcesses.TryRemove(pair.Key, out _);
+        }
+    }
 
     public sealed record ResolvedStream(
         string PageUrl,
@@ -412,6 +433,8 @@ public static class StreamResolver
             return null;
         }
 
+        OutstandingProcesses[proc.Id] = proc;
+
         // Read as raw bytes then decode as UTF-8 — most reliable on Windows.
         await using var stdoutStream = proc.StandardOutput.BaseStream;
         await using var stderrStream = proc.StandardError.BaseStream;
@@ -432,6 +455,10 @@ public static class StreamResolver
             catch { /* ignore */ }
 
             throw;
+        }
+        finally
+        {
+            OutstandingProcesses.TryRemove(proc.Id, out _);
         }
 
         var stdoutBytes = await stdoutTask.ConfigureAwait(false);

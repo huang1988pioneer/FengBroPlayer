@@ -22,7 +22,11 @@ public partial class App : Application
             {
                 DataContext = vm,
             };
-            desktop.Exit += (_, _) => vm.Dispose();
+            desktop.Exit += (_, _) =>
+            {
+                Program.StartExitWatchdog();
+                vm.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();

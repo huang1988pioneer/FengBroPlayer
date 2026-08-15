@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using LibVLCSharp.Shared;
@@ -14,8 +15,10 @@ namespace MusicVideoMediaPlayer.Services;
 public sealed class MediaEngine : IDisposable
 {
     private readonly LibVLC _libVlc;
+    private readonly bool _ownsLibVlc;
     private readonly object _mediaGate = new();
     private readonly List<Media> _pendingRelease = [];
+    private readonly CancellationTokenSource _lifetime = new();
     private Media? _currentMedia;
     private bool _disposed;
     private bool _releaseDrainQueued;
@@ -27,22 +30,38 @@ public sealed class MediaEngine : IDisposable
     public event Action<bool>? PlayingChanged;
 
     public MediaEngine()
+        : this(CreateLibVlc(), ownsLibVlc: true)
+    {
+    }
+
+    public MediaEngine(LibVLC libVlc, bool ownsLibVlc = false)
+    {
+        _libVlc = libVlc ?? throw new ArgumentNullException(nameof(libVlc));
+        _ownsLibVlc = ownsLibVlc;
+        Player = new MediaPlayer(_libVlc);
+        Player.EndReached += OnEndReached;
+        Player.TimeChanged += OnTimeChanged;
+        Player.Playing += OnPlaying;
+        Player.Paused += OnPaused;
+        Player.Stopped += OnStopped;
+    }
+
+    /// <summary>One LibVLC per process — two runtimes double GPU/audio teardown on exit.</summary>
+    public static LibVLC CreateLibVlc()
     {
         InitializeLibVlc();
         // Avoid --avcodec-hw=any: hardware decoder reset on file switch freezes many GPUs.
-        _libVlc = new LibVLC(
+        // --ignore-config: a system VLC install can turn hardware decode back on.
+        return new LibVLC(
+            "--ignore-config",
+            "--intf=dummy",
+            "--no-interact",
             "--no-video-title-show",
             "--quiet",
             "--no-snapshot-preview",
             "--avcodec-hw=none",
             "--file-caching=300",
             "--network-caching=1000");
-        Player = new MediaPlayer(_libVlc);
-        Player.EndReached += OnEndReached;
-        Player.TimeChanged += OnTimeChanged;
-        Player.Playing += OnPlaying;
-        Player.Paused += (_, _) => RaisePlaying(false);
-        Player.Stopped += (_, _) => RaisePlaying(false);
     }
 
     /// <summary>
@@ -290,23 +309,32 @@ public sealed class MediaEngine : IDisposable
         }
 
         // Long delay: disposing Media mid-decode is a primary freeze source on Windows.
+        var token = _lifetime.Token;
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(2500).ConfigureAwait(false);
+                await Task.Delay(2500, token).ConfigureAwait(false);
             }
-            catch { /* ignore */ }
+            catch
+            {
+                return;
+            }
+
+            if (_disposed)
+                return;
 
             Dispatcher.UIThread.Post(() =>
             {
+                if (_disposed)
+                    return;
                 try { DrainReleasedMedia(); }
                 finally
                 {
                     lock (_mediaGate) _releaseDrainQueued = false;
                 }
             }, DispatcherPriority.Background);
-        });
+        }, token);
     }
 
     private void DrainReleasedMedia()
@@ -536,16 +564,36 @@ public sealed class MediaEngine : IDisposable
     }
 
     private void OnEndReached(object? sender, EventArgs e)
-        => Dispatcher.UIThread.Post(() => EndReached?.Invoke());
+    {
+        if (_disposed) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed) return;
+            EndReached?.Invoke();
+        });
+    }
+
+    private void OnPaused(object? sender, EventArgs e) => RaisePlaying(false);
+
+    private void OnStopped(object? sender, EventArgs e) => RaisePlaying(false);
 
     private void OnPlaying(object? sender, EventArgs e)
     {
         RaisePlaying(true);
         // A media swap after a DASH stream can leave LibVLC on the disabled
         // audio track. Select the first real track once parsing has completed.
+        var token = _lifetime.Token;
         Dispatcher.UIThread.Post(async () =>
         {
-            await Task.Delay(180);
+            try
+            {
+                await Task.Delay(180, token).ConfigureAwait(false);
+            }
+            catch
+            {
+                return;
+            }
+
             if (!_disposed)
                 SelectFirstAudioTrack();
         }, DispatcherPriority.Background);
@@ -622,10 +670,34 @@ public sealed class MediaEngine : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        try { _lifetime.Cancel(); } catch { /* ignore */ }
+
         Player.EndReached -= OnEndReached;
         Player.Playing -= OnPlaying;
         Player.TimeChanged -= OnTimeChanged;
-        try { Player.Stop(); } catch { /* ignore */ }
+        Player.Paused -= OnPaused;
+        Player.Stopped -= OnStopped;
+
+        // Mute + pause immediately so WASAPI / D3D stop producing work even if
+        // Stop() is slow. Stop itself runs off the UI thread: calling it here
+        // can freeze the dispatcher or deadlock with VLC event marshaling.
+        try { Player.Volume = 0; } catch { /* ignore */ }
+        try
+        {
+            var state = Player.State;
+            if (state is VLCState.Playing or VLCState.Buffering or VLCState.Opening)
+                Player.SetPause(true);
+        }
+        catch { /* ignore */ }
+
+        var stopped = StopOffUiThread(timeoutMs: 1500);
+
+        // Detach the drawable before the Avalonia HWND is destroyed. Destroying
+        // the child window while Direct3D still owns it leaves the GPU driver
+        // busy after the player window is gone — the whole desktop then stutters.
+        try { Player.Hwnd = IntPtr.Zero; } catch { /* ignore */ }
+
         DrainReleasedMedia();
         lock (_mediaGate)
         {
@@ -637,7 +709,56 @@ public sealed class MediaEngine : IDisposable
             }
             _pendingRelease.Clear();
         }
-        Player.Dispose();
-        _libVlc.Dispose();
+
+        if (stopped)
+        {
+            try { Player.Dispose(); } catch { /* ignore */ }
+            if (_ownsLibVlc)
+            {
+                try { _libVlc.Dispose(); } catch { /* ignore */ }
+            }
+            NativeReleaseCompleted = true;
+        }
+
+        try { _lifetime.Dispose(); } catch { /* ignore */ }
+    }
+
+    /// <summary>
+    /// True when native Stop finished and the player was released.
+    /// A shared <see cref="LibVLC"/> must not be disposed if this is false.
+    /// </summary>
+    public bool NativeReleaseCompleted { get; private set; }
+
+    /// <summary>
+    /// <c>libvlc_media_player_stop</c> blocks until decoders drain. Never call it
+    /// on the UI thread, and never wait forever — a stuck vout must not pin the process.
+    /// </summary>
+    private bool StopOffUiThread(int timeoutMs)
+    {
+        try
+        {
+            var hasHost = Player.Hwnd != IntPtr.Zero;
+            var state = Player.State;
+            // HWND means a Direct3D drawable is live even when state looks idle.
+            if (!hasHost && state is VLCState.NothingSpecial or VLCState.Stopped or VLCState.Error)
+                return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+        using var done = new ManualResetEventSlim(false);
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try { Player.Stop(); }
+            catch { /* ignore */ }
+            finally { done.Set(); }
+        });
+
+        if (done.Wait(timeoutMs))
+            return true;
+
+        return false;
     }
 }

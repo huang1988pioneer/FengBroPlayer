@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,10 +18,12 @@ namespace MusicVideoMediaPlayer.ViewModels;
 
 public partial class MainViewModel : ViewModelBase, IDisposable
 {
-    private readonly MediaEngine _audio = new();
-    private readonly MediaEngine _video = new();
+    private readonly LibVLC _libVlc;
+    private readonly MediaEngine _audio;
+    private readonly MediaEngine _video;
     private readonly RecentPlayStore _recent = new();
     private readonly RecentStreamStore _streams = new();
+    private readonly CancellationTokenSource _shutdown = new();
     private int _selectGeneration;
     private bool _isSelecting;
     private bool _isSeeking;
@@ -122,6 +125,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public MainViewModel()
     {
+        _libVlc = MediaEngine.CreateLibVlc();
+        _audio = new MediaEngine(_libVlc);
+        _video = new MediaEngine(_libVlc);
+
         SeedWaveform();
         ApplyStageFlags(MediaKind.None);
         _recent.Load();
@@ -728,9 +735,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         void Fail(string message)
         {
+            if (_disposed) return;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (generation != _selectGeneration) return;
+                if (_disposed || generation != _selectGeneration) return;
                 IsPlaying = false;
                 StatusMessage = message;
             });
@@ -743,8 +751,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         // Attach video host while yt-dlp runs so HWND is ready when the URL arrives.
+        if (_disposed) return;
         await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
+            if (_disposed) return;
             if (preferVideo)
             {
                 ActiveMediaKind = MediaKind.Video;
@@ -756,7 +766,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         StreamResolver.ResolvedStream? resolved;
         try
         {
-            resolved = await StreamResolver.ResolveAsync(pageUrl).ConfigureAwait(false);
+            resolved = await StreamResolver.ResolveAsync(pageUrl, _shutdown.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (Exception ex)
         {
@@ -776,9 +790,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                             && !string.Equals(streamUrl, resolved.PageUrl, StringComparison.OrdinalIgnoreCase)
                             && !StreamResolver.NeedsExtraction(streamUrl);
 
+        if (_disposed) return;
         await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (generation != _selectGeneration) return;
+            if (_disposed || generation != _selectGeneration) return;
             ApplyNetworkMetadata(pageUrl, display, resolved.Duration, resolved.Uploader);
             RecordRecentDeferred(CurrentMedia ?? Playlist.FirstOrDefault(m =>
                 string.Equals(m.SourceUrl, pageUrl, StringComparison.OrdinalIgnoreCase)));
@@ -793,13 +808,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         // Longer host attach window — extract can take seconds and layout may lag.
         for (var i = 0; i < 20; i++)
         {
-            if (generation != _selectGeneration)
+            if (_disposed || generation != _selectGeneration)
                 return;
 
             var started = false;
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (generation != _selectGeneration)
+                if (_disposed || generation != _selectGeneration)
                     return;
 
                 _video.Volume = (int)(Math.Clamp(Volume, 0, 1) * 100);
@@ -923,9 +938,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             && (IsPlaceholderNetworkTitle(fallbackTitle)
                 || string.Equals(fallbackTitle, host, StringComparison.OrdinalIgnoreCase)))
         {
+            if (_disposed) return;
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (generation != _selectGeneration) return;
+                if (_disposed || generation != _selectGeneration) return;
                 ApplyNetworkMetadata(url, fromPath!);
             });
         }
@@ -935,15 +951,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var meta = await StreamResolver.FetchTitleAsync(url).ConfigureAwait(false);
+            var meta = await StreamResolver.FetchTitleAsync(url, _shutdown.Token).ConfigureAwait(false);
             if (meta is null || string.IsNullOrWhiteSpace(meta.Title))
                 return;
-            if (generation != _selectGeneration)
+            if (_disposed || generation != _selectGeneration)
                 return;
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (generation != _selectGeneration) return;
+                if (_disposed || generation != _selectGeneration) return;
                 ApplyNetworkMetadata(url, meta.Title, meta.Duration, meta.Uploader);
             });
         }
@@ -1869,8 +1885,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _selectGeneration++;
+        try { _shutdown.Cancel(); } catch { /* ignore */ }
+        StreamResolver.KillOutstandingProcesses();
         ClearCurrentCoverImage();
         _audio.Dispose();
         _video.Dispose();
+        if (_audio.NativeReleaseCompleted && _video.NativeReleaseCompleted)
+        {
+            try { _libVlc.Dispose(); } catch { /* ignore */ }
+        }
+        try { _shutdown.Dispose(); } catch { /* ignore */ }
     }
 }
