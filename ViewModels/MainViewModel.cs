@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -1251,29 +1250,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"/select,\"{path}\"",
-                    UseShellExecute = true
-                });
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                var startInfo = new ProcessStartInfo { FileName = "open", UseShellExecute = false };
-                startInfo.ArgumentList.Add("-R");
-                startInfo.ArgumentList.Add(path);
-                Process.Start(startInfo);
-            }
-            else
-            {
-                var startInfo = new ProcessStartInfo { FileName = "xdg-open", UseShellExecute = false };
-                startInfo.ArgumentList.Add(Path.GetDirectoryName(path)!);
-                Process.Start(startInfo);
-            }
-
+            FileExplorer.Reveal(path);
             StatusMessage = $"已在檔案總管中顯示：{item.Title}";
         }
         catch (Exception ex)

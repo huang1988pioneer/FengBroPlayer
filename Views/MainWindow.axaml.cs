@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -53,6 +54,7 @@ public partial class MainWindow : Window
     private bool _applyingWindowState;
     private int _playlistSelectionAnchor = -1;
     private readonly HashSet<MediaItem> _playlistDeletionSelection = [];
+    private MediaItem? _playlistContextItem;
 
     public MainWindow()
     {
@@ -704,15 +706,38 @@ public partial class MainWindow : Window
         // SelectMediaCommand exactly once for an ordinary left click.
     }
 
+    private void OnPlaylistFileMenuOpening(object? sender, CancelEventArgs e)
+    {
+        _playlistContextItem = null;
+        if (sender is not ContextMenu { PlacementTarget: Control target })
+            return;
+
+        _playlistContextItem = target.DataContext as MediaItem
+            ?? target.FindAncestorOfType<Button>(includeSelf: true)?.DataContext as MediaItem;
+    }
+
     private void OnRevealPlaylistFileClick(object? sender, RoutedEventArgs e)
     {
-        var menu = sender as MenuItem;
-        var row = menu?.Parent as ContextMenu is { PlacementTarget: Control target }
-            ? target.FindAncestorOfType<Button>(includeSelf: true)
-            : null;
+        var item = _playlistContextItem
+            ?? (sender as MenuItem)?.DataContext as MediaItem
+            ?? ResolvePlaylistContextItem(sender as Control);
 
-        if (row?.DataContext is MediaItem item && DataContext is MainViewModel vm)
+        if (item is not null && DataContext is MainViewModel vm)
             vm.RevealInFileManagerCommand.Execute(item);
+    }
+
+    private static MediaItem? ResolvePlaylistContextItem(Control? control)
+    {
+        for (StyledElement? current = control; current is not null; current = current.Parent)
+        {
+            if (current is not ContextMenu { PlacementTarget: Control target })
+                continue;
+
+            return target.DataContext as MediaItem
+                ?? target.FindAncestorOfType<Button>(includeSelf: true)?.DataContext as MediaItem;
+        }
+
+        return null;
     }
 
     private void SetPlaylistDeletionSelection(IEnumerable<MediaItem> items)
