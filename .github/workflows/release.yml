@@ -41,7 +41,7 @@ jobs:
       - name: Publish self-contained application
         shell: pwsh
         run: >-
-          dotnet publish FengBroPlayer33.csproj -c Release -r ${{ matrix.rid }}
+          dotnet publish FengBroPlayer.csproj -c Release -r ${{ matrix.rid }}
           --self-contained true -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false
           -o publish/${{ matrix.name }}
@@ -57,15 +57,15 @@ jobs:
       - name: Archive Windows release
         if: matrix.archive == 'zip'
         shell: pwsh
-        run: Compress-Archive -Path publish/${{ matrix.name }}/* -DestinationPath FengBroPlayer33-${{ matrix.name }}.zip
+        run: Compress-Archive -Path publish/${{ matrix.name }}/* -DestinationPath FengBroPlayer-${{ matrix.name }}.zip
       - name: Archive Unix release
         if: matrix.archive == 'tar.gz'
         shell: bash
-        run: tar -C publish/${{ matrix.name }} -czf FengBroPlayer33-${{ matrix.name }}.tar.gz .
+        run: tar -C publish/${{ matrix.name }} -czf FengBroPlayer-${{ matrix.name }}.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: FengBroPlayer33-${{ matrix.name }}
-          path: FengBroPlayer33-${{ matrix.name }}.${{ matrix.archive }}
+          name: FengBroPlayer-${{ matrix.name }}
+          path: FengBroPlayer-${{ matrix.name }}.${{ matrix.archive }}
           if-no-files-found: error
 
   release:

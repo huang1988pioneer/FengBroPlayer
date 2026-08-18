@@ -1,6 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FengBroPlayer33.ViewModels;
+namespace FengBroPlayer.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

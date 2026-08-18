@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace FengBroPlayer33.Helpers;
+namespace FengBroPlayer.Helpers;
 
 /// <summary>
 /// An observable collection that can publish one reset after a batch mutation,

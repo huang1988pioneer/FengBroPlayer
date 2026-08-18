@@ -1,6 +1,6 @@
 using Avalonia.Media;
 
-namespace FengBroPlayer33.Helpers;
+namespace FengBroPlayer.Helpers;
 
 public static class CoverBrush
 {

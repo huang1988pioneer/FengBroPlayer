@@ -1,4 +1,4 @@
-namespace FengBroPlayer33.Models;
+namespace FengBroPlayer.Models;
 
 public enum MediaKind
 {

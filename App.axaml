@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="FengBroPlayer33.App"
-             xmlns:local="using:FengBroPlayer33"
+             x:Class="FengBroPlayer.App"
+             xmlns:local="using:FengBroPlayer"
              RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
@@ -11,13 +11,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceInclude Source="avares://FengBroPlayer33/Styles/AppTheme.axaml" />
+                <ResourceInclude Source="avares://FengBroPlayer/Styles/AppTheme.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
-        <StyleInclude Source="avares://FengBroPlayer33/Styles/Controls.axaml" />
+        <StyleInclude Source="avares://FengBroPlayer/Styles/Controls.axaml" />
     </Application.Styles>
 </Application>

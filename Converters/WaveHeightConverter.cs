@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace FengBroPlayer33.Converters;
+namespace FengBroPlayer.Converters;
 
 public sealed class WaveHeightConverter : IValueConverter
 {

@@ -1,10 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using FengBroPlayer33.ViewModels;
-using FengBroPlayer33.Views;
+using FengBroPlayer.ViewModels;
+using FengBroPlayer.Views;
 
-namespace FengBroPlayer33;
+namespace FengBroPlayer;
 
 public partial class App : Application
 {

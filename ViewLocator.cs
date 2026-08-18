@@ -2,9 +2,9 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using FengBroPlayer33.ViewModels;
+using FengBroPlayer.ViewModels;
 
-namespace FengBroPlayer33;
+namespace FengBroPlayer;
 
 /// <summary>
 /// Given a view model, returns the corresponding view if possible.

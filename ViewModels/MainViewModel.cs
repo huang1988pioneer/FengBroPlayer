@@ -9,11 +9,11 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LibVLCSharp.Shared;
-using FengBroPlayer33.Helpers;
-using FengBroPlayer33.Models;
-using FengBroPlayer33.Services;
+using FengBroPlayer.Helpers;
+using FengBroPlayer.Models;
+using FengBroPlayer.Services;
 
-namespace FengBroPlayer33.ViewModels;
+namespace FengBroPlayer.ViewModels;
 
 public partial class MainViewModel : ViewModelBase, IDisposable
 {

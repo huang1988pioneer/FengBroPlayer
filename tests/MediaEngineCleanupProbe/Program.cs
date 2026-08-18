@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FengBroPlayer33.Services;
+using FengBroPlayer.Services;
 
 if (args.Length == 0)
     throw new ArgumentException("Pass a local media path.");

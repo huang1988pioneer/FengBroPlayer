@@ -10,11 +10,11 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using FengBroPlayer33.Models;
-using FengBroPlayer33.Services;
-using FengBroPlayer33.ViewModels;
+using FengBroPlayer.Models;
+using FengBroPlayer.Services;
+using FengBroPlayer.ViewModels;
 
-namespace FengBroPlayer33.Views;
+namespace FengBroPlayer.Views;
 
 public partial class MainWindow : Window
 {

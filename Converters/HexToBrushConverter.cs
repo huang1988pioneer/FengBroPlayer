@@ -3,7 +3,7 @@ using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
-namespace FengBroPlayer33.Converters;
+namespace FengBroPlayer.Converters;
 
 public sealed class HexToBrushConverter : IValueConverter
 {

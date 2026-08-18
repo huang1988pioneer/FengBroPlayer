@@ -7,9 +7,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using FengBroPlayer33.Models;
+using FengBroPlayer.Models;
 
-namespace FengBroPlayer33.Services;
+namespace FengBroPlayer.Services;
 
 /// <summary>
 /// Persists recently opened network stream URLs (separate from local recent play).
@@ -38,7 +38,7 @@ public sealed class RecentStreamStore
     {
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "FengBroPlayer33");
+            "FengBroPlayer");
         Directory.CreateDirectory(dir);
         _filePath = Path.Combine(dir, "recent-streams.json");
     }

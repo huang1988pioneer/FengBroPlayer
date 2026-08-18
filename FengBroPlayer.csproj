@@ -3,8 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyName>FengBroPlayer33</AssemblyName>
-    <RootNamespace>FengBroPlayer33</RootNamespace>
+    <AssemblyName>FengBroPlayer</AssemblyName>
+    <RootNamespace>FengBroPlayer</RootNamespace>
     <Product>鋒兄播放器</Product>
     <AssemblyTitle>鋒兄播放器</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>

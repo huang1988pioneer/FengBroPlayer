@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FengBroPlayer33.Models;
+namespace FengBroPlayer.Models;
 
 public partial class MediaItem : ObservableObject
 {

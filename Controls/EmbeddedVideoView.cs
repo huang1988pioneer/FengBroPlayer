@@ -5,7 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Platform;
 using LibVLCSharp.Shared;
 
-namespace FengBroPlayer33.Controls;
+namespace FengBroPlayer.Controls;
 
 /// <summary>
 /// Embeds LibVLC video into a true child HWND (Windows) via NativeControlHost.

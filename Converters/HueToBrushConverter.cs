@@ -1,9 +1,9 @@
 using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
-using FengBroPlayer33.Helpers;
+using FengBroPlayer.Helpers;
 
-namespace FengBroPlayer33.Converters;
+namespace FengBroPlayer.Converters;
 
 public sealed class HueToBrushConverter : IValueConverter
 {

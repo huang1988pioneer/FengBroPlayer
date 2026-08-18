@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 
-namespace FengBroPlayer33.Services;
+namespace FengBroPlayer.Services;
 
 public static class MediaMetadata
 {
