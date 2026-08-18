@@ -1,5 +1,5 @@
 param(
-    [string]$Executable = (Join-Path $PSScriptRoot '..\bin\Debug\net10.0\MusicVideoMediaPlayer.exe'),
+    [string]$Executable = (Join-Path $PSScriptRoot '..\bin\Debug\net10.0\FengBroPlayer33.exe'),
     [int]$ExitTimeoutSeconds = 5
 )
 

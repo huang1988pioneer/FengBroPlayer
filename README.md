@@ -1,6 +1,6 @@
-# MusicVideoMediaPlayer
+# FengBroPlayer33
 
-多媒體播放器 · AvaloniaUI · **Stage-centric Pro Player**（參考 KMPlayer / PotPlayer IA）
+桌面多媒體播放器 · AvaloniaUI · **Stage-centric Pro Player**（參考 KMPlayer / PotPlayer IA）
 
 跨平台桌面多媒體播放器，使用 **AvaloniaUI 12** + **MVVM**（CommunityToolkit.Mvvm）+ **LibVLC** 實際播放。
 
@@ -61,7 +61,7 @@ dotnet run
 ## 專案結構
 
 ```
-MusicVideoMediaPlayer/
+FengBroPlayer33/
 ├── Models/           # MediaItem, MediaKind, ChromeMode, …
 ├── ViewModels/       # MainViewModel
 ├── Views/            # MainWindow 舞台殼層

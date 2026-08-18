@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MusicVideoMediaPlayer.Services;
+namespace FengBroPlayer33.Services;
 
 /// <summary>
 /// Resolves page URLs (YouTube, etc.) to direct media URLs via yt-dlp when available.

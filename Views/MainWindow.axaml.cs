@@ -10,11 +10,11 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using MusicVideoMediaPlayer.Models;
-using MusicVideoMediaPlayer.Services;
-using MusicVideoMediaPlayer.ViewModels;
+using FengBroPlayer33.Models;
+using FengBroPlayer33.Services;
+using FengBroPlayer33.ViewModels;
 
-namespace MusicVideoMediaPlayer.Views;
+namespace FengBroPlayer33.Views;
 
 public partial class MainWindow : Window
 {

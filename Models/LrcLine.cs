@@ -1,4 +1,4 @@
-namespace MusicVideoMediaPlayer.Models;
+namespace FengBroPlayer33.Models;
 
 /// <summary>
 /// Represents a single timed lyric line parsed from an LRC file.

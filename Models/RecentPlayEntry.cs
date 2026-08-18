@@ -1,7 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace MusicVideoMediaPlayer.Models;
+namespace FengBroPlayer33.Models;
 
 /// <summary>One row in the recently-played list (in-memory + JSON persistence).</summary>
 public partial class RecentPlayEntry : ObservableObject

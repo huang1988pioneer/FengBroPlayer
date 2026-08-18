@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using LibVLCSharp.Shared;
 
-namespace MusicVideoMediaPlayer.Services;
+namespace FengBroPlayer33.Services;
 
 /// <summary>
 /// Thin LibVLC wrapper for audio/video playback with UI-thread callbacks.

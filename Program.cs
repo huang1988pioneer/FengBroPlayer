@@ -5,7 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-namespace MusicVideoMediaPlayer;
+namespace FengBroPlayer33;
 
 sealed class Program
 {

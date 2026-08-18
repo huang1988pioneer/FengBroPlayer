@@ -3,8 +3,8 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using MusicVideoMediaPlayer.Models;
-using MusicVideoMediaPlayer.ViewModels;
+using FengBroPlayer33.Models;
+using FengBroPlayer33.ViewModels;
 
 var itemCount = args.Length == 0 ? 200 : int.Parse(args[0]);
 var rounds = args.Length < 2 ? 5 : int.Parse(args[1]);

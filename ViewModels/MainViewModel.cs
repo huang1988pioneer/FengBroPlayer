@@ -9,11 +9,11 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LibVLCSharp.Shared;
-using MusicVideoMediaPlayer.Helpers;
-using MusicVideoMediaPlayer.Models;
-using MusicVideoMediaPlayer.Services;
+using FengBroPlayer33.Helpers;
+using FengBroPlayer33.Models;
+using FengBroPlayer33.Services;
 
-namespace MusicVideoMediaPlayer.ViewModels;
+namespace FengBroPlayer33.ViewModels;
 
 public partial class MainViewModel : ViewModelBase, IDisposable
 {
@@ -81,7 +81,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string PositionText { get; set; } = "00:00";
     [ObservableProperty] public partial string DurationText { get; set; } = "00:00";
-    [ObservableProperty] public partial string WindowTitle { get; set; } = "多媒體播放器";
+    [ObservableProperty] public partial string WindowTitle { get; set; } = "FengBroPlayer33";
     [ObservableProperty] public partial bool IsMuted { get; set; }
     [ObservableProperty] public partial string StatusMessage { get; set; } = "就緒 — 可開啟本機音樂或影片檔案";
     [ObservableProperty] public partial string StatusDetail { get; set; } = "";
@@ -265,7 +265,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         HasPlayableMedia = item?.IsPlayable == true;
         if (item is not null)
         {
-            WindowTitle = $"{item.Title} — 多媒體播放器";
+            WindowTitle = $"{item.Title} — FengBroPlayer33";
             DurationText = item.Duration;
             PositionText = "00:00";
             Progress = 0;
@@ -278,7 +278,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            WindowTitle = "多媒體播放器";
+            WindowTitle = "FengBroPlayer33";
             StatusDetail = "";
             ClearCurrentCoverImage();
             ClearLyrics();
@@ -884,7 +884,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (CurrentMedia is not null
             && string.Equals(CurrentMedia.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
         {
-            WindowTitle = $"{title} — 多媒體播放器";
+            WindowTitle = $"{title} — FengBroPlayer33";
             if (!string.IsNullOrWhiteSpace(duration))
                 DurationText = duration!;
             StatusDetail = string.Join(" · ",
@@ -1647,7 +1647,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Progress = 0;
         PositionText = "00:00";
         DurationText = "00:00";
-        WindowTitle = "多媒體播放器";
+        WindowTitle = "FengBroPlayer33";
         HasPlayableMedia = false;
         StatusMessage = "已清除播放清單";
         StatusDetail = "";

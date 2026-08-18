@@ -4,7 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace MusicVideoMediaPlayer.Helpers;
+namespace FengBroPlayer33.Helpers;
 
 /// <summary>
 /// Opens the system file manager and highlights a local file.

@@ -1,14 +1,14 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:MusicVideoMediaPlayer.ViewModels"
-        xmlns:models="using:MusicVideoMediaPlayer.Models"
-        xmlns:conv="using:MusicVideoMediaPlayer.Converters"
-        xmlns:ctrl="using:MusicVideoMediaPlayer.Controls"
+        xmlns:vm="using:FengBroPlayer33.ViewModels"
+        xmlns:models="using:FengBroPlayer33.Models"
+        xmlns:conv="using:FengBroPlayer33.Converters"
+        xmlns:ctrl="using:FengBroPlayer33.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         d:DesignWidth="1280" d:DesignHeight="800"
-        x:Class="MusicVideoMediaPlayer.Views.MainWindow"
+        x:Class="FengBroPlayer33.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="{Binding WindowTitle}"
@@ -221,7 +221,7 @@
                                 </Panel>
                             </Border>
 
-                            <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='多媒體播放器'}"
+                            <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='FengBroPlayer33'}"
                                        FontSize="22"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}"

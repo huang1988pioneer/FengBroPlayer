@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="MusicVideoMediaPlayer.App"
-             xmlns:local="using:MusicVideoMediaPlayer"
+             x:Class="FengBroPlayer33.App"
+             xmlns:local="using:FengBroPlayer33"
              RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
@@ -11,13 +11,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceInclude Source="avares://MusicVideoMediaPlayer/Styles/AppTheme.axaml" />
+                <ResourceInclude Source="avares://FengBroPlayer33/Styles/AppTheme.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
-        <StyleInclude Source="avares://MusicVideoMediaPlayer/Styles/Controls.axaml" />
+        <StyleInclude Source="avares://FengBroPlayer33/Styles/Controls.axaml" />
     </Application.Styles>
 </Application>

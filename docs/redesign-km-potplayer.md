@@ -1,4 +1,4 @@
-# 設計文件：MusicVideoMediaPlayer UI/UX 重構（KMPlayer / PotPlayer 原型導向）
+# 設計文件：FengBroPlayer33 UI/UX 重構（KMPlayer / PotPlayer 原型導向）
 
 | 欄位 | 內容 |
 |------|------|
@@ -6,14 +6,14 @@
 | **作者** | （待填） |
 | **日期** | 2026-08-07 |
 | **狀態** | Draft（rev 0.3 — 再審修訂） |
-| **工作區** | `D:\codex\MusicVideoMediaPlayer` |
+| **工作區** | `D:\codex\FengBroPlayer33` |
 | **技術棧** | AvaloniaUI 12 · CommunityToolkit.Mvvm · LibVLCSharp · TagLibSharp · Traditional Chinese UI |
 
 ---
 
 ## Overview
 
-現有 MusicVideoMediaPlayer 以 Spotify 風格的深色媒體庫為設計語言：左側導覽欄、音樂／影片雙面板上下堆疊、紫系漸層卡片與示範社群互動（讚／留言）。這與用戶要求參考的 **KMPlayer / PotPlayer** 體驗差異很大——後者是以 **影片舞台為主畫布**、底部密集控制列、可開關播放清單 dock、選單列與右鍵選單為核心的「本機威力型桌面播放器」。
+現有 FengBroPlayer33 以 Spotify 風格的深色媒體庫為設計語言：左側導覽欄、音樂／影片雙面板上下堆疊、紫系漸層卡片與示範社群互動（讚／留言）。這與用戶要求參考的 **KMPlayer / PotPlayer** 體驗差異很大——後者是以 **影片舞台為主畫布**、底部密集控制列、可開關播放清單 dock、選單列與右鍵選單為核心的「本機威力型桌面播放器」。
 
 本設計將主視窗重構為 **stage-centric（舞台中心）** 架構：單一主要媒體串流、共用底部 transport bar、可切換右側播放清單、音訊時舞台顯示封面／視覺化、影片時以 `EmbeddedVideoView` 填滿舞台。視覺語言為 **Pro Dark**（中性深灰 + 鎖定 accent `#3B9EFF`），保留中文文案與 LibVLC 實際播放能力，並嚴格遵守 HWND airspace 限制。
 
@@ -382,7 +382,7 @@ public enum MediaKind { None, Audio, Video }
 [ObservableProperty] public partial double Progress { get; set; }
 [ObservableProperty] public partial string PositionText { get; set; } = "00:00";
 [ObservableProperty] public partial string DurationText { get; set; } = "00:00";
-[ObservableProperty] public partial string WindowTitle { get; set; } = "多媒體播放器";
+[ObservableProperty] public partial string WindowTitle { get; set; } = "FengBroPlayer33";
 [ObservableProperty] public partial bool IsMuted { get; set; }
 [ObservableProperty] public partial string StatusMessage { get; set; } = "就緒 — 可開啟本機音樂或影片檔案";
 [ObservableProperty] public partial string StatusDetail { get; set; } = "";
@@ -622,7 +622,7 @@ Clear：Stop 活躍引擎；P0 清除本機項、保留 2 demo
 | **Mute / SetRate** | `Services/MediaEngine.cs`（**PR-2.5**，非延到 PR-6 才加 API） |
 | 宿主 | `Controls/EmbeddedVideoView.cs` — 行為原則不變；列高由外部 layout 控制 |
 | **Metadata 擴充** | `Services/MediaMetadata.cs`：`VideoInfo` 增加 `Width`/`Height`/`Bitrate`；`ReadVideo` 讀 TagLib `Properties.VideoWidth/Height`、`AudioBitrate`（可能為 0——UI 顯示「—」） |
-| 可選測試 | 新 `MusicVideoMediaPlayer.Tests`：`MediaMetadata.IsAudio/IsVideo`、`Reindex`、路徑 kind（**非阻塞**） |
+| 可選測試 | 新 `FengBroPlayer33.Tests`：`MediaMetadata.IsAudio/IsVideo`、`Reindex`、路徑 kind（**非阻塞**） |
 
 ### 11. 空狀態、示範資料、字串語言
 
@@ -831,7 +831,7 @@ TagLib 對部分容器回 0×0 時 UI 顯示「—」；日後可改讀 LibVLC t
    - audio↔video 多次切換無雙音軌
    - Stop 後再 Play 成功
    - Fullscreen F/Esc、auto-hide 不擋 seek
-4. **可選：** `MusicVideoMediaPlayer.Tests` 煙測 `IsAudio`/`IsVideo`、playlist reindex（不阻擋 UI 合併）。
+4. **可選：** `FengBroPlayer33.Tests` 煙測 `IsAudio`/`IsVideo`、playlist reindex（不阻擋 UI 合併）。
 5. 引擎合併 PR：Dispose 順序 + 20× 音視切換。
 
 ---
@@ -867,7 +867,7 @@ TagLib 對部分容器回 0×0 時 UI 顯示「—」；日後可改讀 LibVLC t
 
 ## References
 
-- 工作區：`D:\codex\MusicVideoMediaPlayer`
+- 工作區：`D:\codex\FengBroPlayer33`
 - `Views/MainWindow.axaml` — 雙面板、airspace 註解
 - `ViewModels/MainViewModel.cs` — 雙引擎、Pause 互斥、import
 - `Controls/EmbeddedVideoView.cs` — HWND create/destroy

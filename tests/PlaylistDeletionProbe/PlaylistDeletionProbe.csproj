@@ -6,6 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MusicVideoMediaPlayer.csproj" />
+    <ProjectReference Include="..\..\FengBroPlayer33.csproj" />
   </ItemGroup>
 </Project>

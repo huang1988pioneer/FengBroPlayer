@@ -4,9 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
-using MusicVideoMediaPlayer.Models;
+using FengBroPlayer33.Models;
 
-namespace MusicVideoMediaPlayer.Services;
+namespace FengBroPlayer33.Services;
 
 /// <summary>Parses standard timestamped LRC files, including multiple timestamps per line.</summary>
 public static partial class LrcParser

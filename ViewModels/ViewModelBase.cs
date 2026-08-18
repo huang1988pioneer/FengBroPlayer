@@ -1,6 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace MusicVideoMediaPlayer.ViewModels;
+namespace FengBroPlayer33.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

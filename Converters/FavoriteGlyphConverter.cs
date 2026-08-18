@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace MusicVideoMediaPlayer.Converters;
+namespace FengBroPlayer33.Converters;
 
 public sealed class FavoriteGlyphConverter : IValueConverter
 {

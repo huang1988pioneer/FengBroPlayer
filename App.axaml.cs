@@ -1,10 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using MusicVideoMediaPlayer.ViewModels;
-using MusicVideoMediaPlayer.Views;
+using FengBroPlayer33.ViewModels;
+using FengBroPlayer33.Views;
 
-namespace MusicVideoMediaPlayer;
+namespace FengBroPlayer33;
 
 public partial class App : Application
 {
