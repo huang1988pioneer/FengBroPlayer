@@ -221,7 +221,7 @@
                                 </Panel>
                             </Border>
 
-                            <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='FengBroPlayer33'}"
+                            <TextBlock Text="{Binding CurrentMedia.Title, FallbackValue='鋒兄播放器'}"
                                        FontSize="22"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}"

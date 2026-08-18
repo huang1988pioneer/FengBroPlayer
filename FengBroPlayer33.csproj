@@ -5,7 +5,8 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FengBroPlayer33</AssemblyName>
     <RootNamespace>FengBroPlayer33</RootNamespace>
-    <Product>FengBroPlayer33</Product>
+    <Product>鋒兄播放器</Product>
+    <AssemblyTitle>鋒兄播放器</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 

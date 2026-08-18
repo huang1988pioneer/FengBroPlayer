@@ -96,6 +96,6 @@ jobs:
             gh release create "$RELEASE_TAG" "${assets[@]}" \
               -R "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "FengBroPlayer33 $RELEASE_TAG" \
+              --title "鋒兄播放器 $RELEASE_TAG" \
               --generate-notes
           fi

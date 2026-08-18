@@ -382,7 +382,7 @@ public enum MediaKind { None, Audio, Video }
 [ObservableProperty] public partial double Progress { get; set; }
 [ObservableProperty] public partial string PositionText { get; set; } = "00:00";
 [ObservableProperty] public partial string DurationText { get; set; } = "00:00";
-[ObservableProperty] public partial string WindowTitle { get; set; } = "FengBroPlayer33";
+[ObservableProperty] public partial string WindowTitle { get; set; } = "鋒兄播放器";
 [ObservableProperty] public partial bool IsMuted { get; set; }
 [ObservableProperty] public partial string StatusMessage { get; set; } = "就緒 — 可開啟本機音樂或影片檔案";
 [ObservableProperty] public partial string StatusDetail { get; set; } = "";
