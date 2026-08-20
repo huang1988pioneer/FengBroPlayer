@@ -80,6 +80,8 @@ FengBroPlayer/
 
 設計規格見 [`docs/redesign-km-potplayer.md`](docs/redesign-km-potplayer.md)。
 
+技術選型、已導入與按需求擴充的套件界線，見 [`docs/architecture.md`](docs/architecture.md)。
+
 ## 後續可擴充
 
 - 單一 `MediaEngine` 合併（PR-7）
