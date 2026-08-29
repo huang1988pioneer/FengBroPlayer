@@ -44,7 +44,7 @@ public sealed class LyricTextBlock : TextBlock
     protected override Size MeasureOverride(Size availableSize)
     {
         var width = GetEffectiveWidth(availableSize.Width);
-        if (!_needsFormatting || AreSameWidth(width, _lastMeasuredWidth))
+        if (!_needsFormatting && AreSameWidth(width, _lastMeasuredWidth))
             return base.MeasureOverride(availableSize);
 
         SetDisplayText(_sourceText);

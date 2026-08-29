@@ -44,12 +44,18 @@ var wrappingControl = new LyricTextBlock
 {
     Text = source,
     FontSize = 18,
-    MaxWidth = 80,
+    MaxWidth = 240,
     TextWrapping = Avalonia.Media.TextWrapping.Wrap,
     TextTrimming = Avalonia.Media.TextTrimming.None
 };
 wrappingControl.Measure(new Size(80, double.PositiveInfinity));
 AssertEqual("一二三\n四五", wrappingControl.Text, "format the measured control text");
+
+wrappingControl.Measure(new Size(240, double.PositiveInfinity));
+AssertEqual(source, wrappingControl.Text, "restore whitespace when wrapping is no longer needed");
+
+wrappingControl.Measure(new Size(80, double.PositiveInfinity));
+AssertEqual("一二三\n四五", wrappingControl.Text, "reapply the break after narrowing again");
 
 var singleLineControl = new LyricTextBlock
 {
