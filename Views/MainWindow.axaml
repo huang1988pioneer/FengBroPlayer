@@ -32,10 +32,94 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <!-- =====================================================================
+         Layout (PotPlayer-inspired):
+           Row 0  Top chrome bar  (app name ▼ · format tag · filename · win ctrls)
+           Row 1  Menu (檔案 / 播放 / 檢視)
+           Row 2  Stage + Playlist dock
+           Row 3  Info bar          (big time · filename · codec · VU meter)
+           Row 4  Yellow seek bar
+           Row 5  Compact transport (stop · prev · play · next · ±10s · playlist · fullscreen · open · vol)
+           Row 6  Status bar
+         ===================================================================== -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
+
+        <!-- ===================== TOP CHROME BAR (PotPlayer-style) ===================== -->
+        <Border Grid.Row="0" Classes="chrome-top">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto">
+                <!-- App name + dropdown indicator (left-click opens the menu, like PotPlayer) -->
+                <Button Grid.Column="0"
+                        x:Name="ChromeAppButton"
+                        Classes="chrome-app"
+                        Content="FengBroPlayer ▼"
+                        Click="OnChromeAppMenuClick">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="開啟檔案…"
+                                      Command="{Binding OpenMediaCommand}"
+                                      InputGesture="Ctrl+O" />
+                            <MenuItem Header="開啟網路串流…"
+                                      Command="{Binding OpenNetworkUrlCommand}" />
+                            <Separator />
+                            <MenuItem Header="播放/暫停"
+                                      Command="{Binding TogglePlayCommand}"
+                                      InputGesture="Space" />
+                            <MenuItem Header="停止"
+                                      Command="{Binding StopMediaCommand}"
+                                      InputGesture="S" />
+                            <Separator />
+                            <MenuItem Header="播放清單"
+                                      Command="{Binding TogglePlaylistCommand}"
+                                      InputGesture="P" />
+                            <MenuItem Header="全螢幕"
+                                      Command="{Binding ToggleFullscreenCommand}"
+                                      InputGesture="F" />
+                            <Separator />
+                            <MenuItem Header="結束" Click="OnChromeExitClick" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <!-- Format tag chip -->
+                <Border Grid.Column="1" Classes="format-tag">
+                    <TextBlock Text="{Binding FormatTag}"
+                               FontSize="10.5"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" />
+                </Border>
+
+                <!-- Filename (truncated) -->
+                <TextBlock Grid.Column="2"
+                           Classes="chrome-filename"
+                           Text="{Binding CurrentMedia.Title, FallbackValue='尚未載入媒體'}" />
+
+                <!-- Right-side window controls -->
+                <Button Grid.Column="3"
+                        Classes="chrome-icon"
+                        Content="📌"
+                        ToolTip.Tip="釘選置頂"
+                        Click="OnTogglePinClick" />
+                <Button Grid.Column="4"
+                        Classes="chrome-icon"
+                        Content="─"
+                        ToolTip.Tip="最小化"
+                        Click="OnMinimizeClick" />
+                <Button Grid.Column="5"
+                        Classes="chrome-icon"
+                        Content="☐"
+                        ToolTip.Tip="最大化"
+                        Click="OnMaximizeClick" />
+                <Button Grid.Column="6"
+                        Classes="chrome-icon"
+                        Content="✕"
+                        ToolTip.Tip="關閉"
+                        Click="OnCloseClick" />
+                <Border Grid.Column="7" Width="0" />
+            </Grid>
+        </Border>
 
         <!-- ===================== MENU ===================== -->
-        <Menu Grid.Row="0"
+        <Menu Grid.Row="1"
               IsVisible="{Binding IsMenuBarVisible}"
               Background="{StaticResource BgPanelBrush}">
             <MenuItem Header="檔案(_F)">
@@ -105,7 +189,7 @@
         </Menu>
 
         <!-- ===================== STAGE + PLAYLIST ===================== -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
 
             <!-- Stage: video HWND is only visible in video mode.
                  HWND airspace paints above Avalonia siblings — keeping it under audio
@@ -571,8 +655,82 @@
             </Border>
         </Grid>
 
-        <!-- ===================== TRANSPORT (outside HWND) ===================== -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,Auto">
+        <!-- ===================== INFO BAR (PotPlayer-style) ===================== -->
+        <Border Grid.Row="3" Classes="info-bar">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+
+                <!-- Big time + duration (PotPlayer: huge white numbers) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding PositionText, FallbackValue='00:00'}"
+                               Classes="big-time" />
+                    <TextBlock Text="/" Classes="big-time-small" />
+                    <TextBlock Text="{Binding DurationText, FallbackValue='00:00'}"
+                               Classes="big-time-small" />
+                </StackPanel>
+
+                <!-- Separator -->
+                <Border Grid.Column="1" Width="1" Height="22" Margin="14,0,14,0"
+                        Background="{StaticResource BorderSubtleBrush}" />
+
+                <!-- Filename + codec info -->
+                <StackPanel Grid.Column="2" Orientation="Vertical" Spacing="1" MaxWidth="380">
+                    <TextBlock Classes="info-filename"
+                               Text="{Binding CurrentMedia.Title, FallbackValue='尚未載入'}" />
+                    <TextBlock Classes="codec-label"
+                               Text="{Binding StatusDetail, FallbackValue='MP3 · 192kbps · 48kHz'}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!-- Spacer -->
+                <Border Grid.Column="3" />
+
+                <!-- VU meter (right side of info bar) -->
+                <Border Grid.Column="4"
+                        Background="{StaticResource VuDimBrush}"
+                        CornerRadius="2"
+                        Padding="2"
+                        Margin="0,2,12,2"
+                        VerticalAlignment="Center">
+                    <ItemsControl ItemsSource="{Binding VuLevels}"
+                                  VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:Double">
+                                <Border Classes="vu-bar"
+                                        Height="{Binding Converter={x:Static conv:VuHeightConverter.Instance}, ConverterParameter=22}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- Codec chip cluster (MP4 / AVC1 / AAC) -->
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" Margin="0,0,4,0">
+                    <Border Classes="format-tag" Background="#1A2A3A" BorderBrush="#2A4A6A">
+                        <TextBlock Text="{Binding FormatTag}" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentGlowBrush}" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== YELLOW SEEK BAR ===================== -->
+        <Border Grid.Row="4" Classes="seek-bar-container">
+            <Slider Name="SeekSlider"
+                    Classes="seek-yellow"
+                    Minimum="0"
+                    Maximum="1"
+                    Value="{Binding Progress, Mode=TwoWay}"
+                    IsEnabled="{Binding HasPlayableMedia}"
+                    ToolTip.Tip="拖曳或點擊時間軸跳轉"
+                    KeyUp="OnSeekKeyUp" />
+        </Border>
+
+        <!-- ===================== COMPACT TRANSPORT (PotPlayer-style) ===================== -->
+        <Grid Grid.Row="5" RowDefinitions="Auto,Auto">
             <!-- FS hot-zone -->
             <Border x:Name="HotZone"
                     Height="6"
@@ -581,116 +739,92 @@
 
             <Border Grid.Row="1"
                     x:Name="ControlBar"
-                    Classes="control-bar"
+                    Classes="control-bar-compact"
                     IsVisible="{Binding IsControlBarVisible}">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+
                     <!-- Left: stop / prev / play / next / ±10s -->
-                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                        <Button Classes="transport"
+                    <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                        <Button Classes="transport-compact"
                                 Content="■"
                                 ToolTip.Tip="停止 (S)"
                                 Command="{Binding StopMediaCommand}" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="⏮"
                                 ToolTip.Tip="上一個"
                                 Command="{Binding PlayPreviousCommand}" />
-                        <Button Classes="play-main"
+                        <Button Classes="play-main-compact"
                                 Command="{Binding TogglePlayCommand}"
                                 Content="{Binding IsPlaying, Converter={x:Static conv:PlayPauseGlyphConverter.Instance}}"
                                 ToolTip.Tip="播放/暫停 (Space)" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="⏭"
                                 ToolTip.Tip="下一個"
                                 Command="{Binding PlayNextCommand}" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="−10"
-                                FontSize="10"
+                                FontSize="9.5"
                                 ToolTip.Tip="倒退 10 秒"
                                 Command="{Binding SeekRelativeCommand}"
                                 CommandParameter="-10" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="+10"
-                                FontSize="10"
+                                FontSize="9.5"
                                 ToolTip.Tip="快轉 10 秒"
                                 Command="{Binding SeekRelativeCommand}"
                                 CommandParameter="10" />
                     </StackPanel>
 
-                    <!-- Center: seek -->
-                    <Grid Grid.Column="1" ColumnDefinitions="48,*,48" ColumnSpacing="8" VerticalAlignment="Center">
-                        <TextBlock Grid.Column="0"
-                                   Text="{Binding PositionText}"
-                                   Classes="muted"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"
-                                   FontFeatures="tnum" />
-                        <Slider Grid.Column="1"
-                                Name="SeekSlider"
-                                Classes="progress seek"
-                                Minimum="0"
-                                Maximum="1"
-                                Value="{Binding Progress, Mode=TwoWay}"
-                                IsEnabled="{Binding HasPlayableMedia}"
-                                ToolTip.Tip="拖曳或點擊時間軸跳轉"
-                                KeyUp="OnSeekKeyUp" />
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding DurationText}"
-                                   Classes="muted"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"
-                                   FontFeatures="tnum" />
-                    </Grid>
+                    <!-- Center spacer (seek bar lives in its own row above) -->
+                    <Border Grid.Column="1" />
 
-                    <!-- Right: mute / volume / playlist / FS / open -->
+                    <!-- Right: mute / volume / playlist / FS / open / CC / LRC -->
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"
-                                Spacing="4"
+                                Spacing="2"
                                 VerticalAlignment="Center">
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 ToolTip.Tip="靜音 (M)"
                                 Command="{Binding ToggleMuteCommand}">
                             <Panel>
-                                <TextBlock Text="🔊" IsVisible="{Binding !IsMuted}" FontSize="13" />
-                                <TextBlock Text="🔇" IsVisible="{Binding IsMuted}" FontSize="13" />
+                                <TextBlock Text="🔊" IsVisible="{Binding !IsMuted}" FontSize="12" />
+                                <TextBlock Text="🔇" IsVisible="{Binding IsMuted}" FontSize="12" />
                             </Panel>
                         </Button>
-                        <Slider Width="90"
-                                Classes="progress"
+                        <Slider Classes="volume-compact"
                                 Minimum="0"
                                 Maximum="1"
                                 Value="{Binding Volume, Mode=TwoWay}"
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="音量" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="☰"
                                 ToolTip.Tip="播放清單 (P)"
                                 Command="{Binding TogglePlaylistCommand}" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="⛶"
                                 ToolTip.Tip="全螢幕 (F)"
                                 Command="{Binding ToggleFullscreenCommand}" />
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 ToolTip.Tip="Load dynamic lyrics (.lrc)"
                                 Command="{Binding OpenLyricsCommand}">
-                            <TextBlock Text="LRC" FontSize="10" FontWeight="Bold" />
+                            <TextBlock Text="LRC" FontSize="9.5" FontWeight="Bold" />
                         </Button>
                         <!-- Subtitle button: visible only in video mode -->
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 IsVisible="{Binding IsVideoStage}"
                                 ToolTip.Tip="{Binding HasSubtitle, Converter={x:Static conv:SubtitleTooltipConverter.Instance}}"
                                 Command="{Binding OpenSubtitleCommand}">
                             <Panel>
-                                <TextBlock Text="CC" FontSize="11" FontWeight="Bold"
+                                <TextBlock Text="CC" FontSize="10" FontWeight="Bold"
                                            IsVisible="{Binding !HasSubtitle}"
                                            Opacity="0.5" />
-                                <TextBlock Text="CC" FontSize="11" FontWeight="Bold"
+                                <TextBlock Text="CC" FontSize="10" FontWeight="Bold"
                                            IsVisible="{Binding HasSubtitle}"
                                            Foreground="{StaticResource AccentBrush}" />
                             </Panel>
                         </Button>
-                        <Button Classes="transport"
+                        <Button Classes="transport-compact"
                                 Content="📂"
                                 ToolTip.Tip="開啟檔案 (Ctrl+O)"
                                 Command="{Binding OpenMediaCommand}" />
@@ -700,7 +834,7 @@
         </Grid>
 
         <!-- ===================== STATUS ===================== -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="6"
                 Classes="status-bar"
                 IsVisible="{Binding IsStatusBarVisible}">
             <Grid ColumnDefinitions="*,Auto">

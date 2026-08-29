@@ -50,6 +50,11 @@ public partial class MainWindow : Window
     };
 
     private readonly DispatcherTimer _fsHideTimer;
+    private readonly DispatcherTimer _vuTimer;
+    private readonly Random _vuRng = new(1234);
+    private double[] _vuLevels = new double[32];
+    private double[] _vuPeaks = new double[32];
+    private double[] _vuPeakHold = new double[32];
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
     private bool _applyingWindowState;
     private int _playlistSelectionAnchor = -1;
@@ -85,6 +90,12 @@ public partial class MainWindow : Window
 
         _fsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         _fsHideTimer.Tick += OnFullscreenHideTick;
+
+        // VU meter animation: refresh every 50ms while playing. Real audio levels
+        // are not exposed by LibVLCSharp per-channel without a custom callback, so
+        // we drive a visually convincing animation that reacts to IsPlaying.
+        _vuTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        _vuTimer.Tick += OnVuTimerTick;
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -104,9 +115,20 @@ public partial class MainWindow : Window
         vm.PickLyricsAsync = PickLyricsFileAsync;
         vm.PropertyChanged += OnViewModelPropertyChanged;
 
+        // VU meter reacts to playback state.
+        if (!IsPlayingWatchAttached)
+        {
+            vm.PropertyChanged += OnVmPropForVu;
+            IsPlayingWatchAttached = true;
+        }
+        ResetVuMeter();
+        if (vm.IsPlaying) _vuTimer.Start();
+
         // Keep video HWND mounted for the whole session (overlay UI for audio/idle).
         Dispatcher.UIThread.Post(PrepareVideoHost, DispatcherPriority.Loaded);
     }
+
+    private bool IsPlayingWatchAttached;
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -228,8 +250,102 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _fsHideTimer.Stop();
+        _vuTimer.Stop();
         ShutdownPlayback();
     }
+
+    // ============================================================
+    // VU meter — simulates per-bar audio levels when playing.
+    // ============================================================
+
+    private void OnVmPropForVu(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not MainViewModel vm) return;
+        if (e.PropertyName != nameof(MainViewModel.IsPlaying)) return;
+
+        if (vm.IsPlaying)
+        {
+            if (!_vuTimer.IsEnabled) _vuTimer.Start();
+        }
+        else
+        {
+            _vuTimer.Stop();
+            // Decay to dim so paused state looks calm rather than frozen.
+            for (var i = 0; i < _vuLevels.Length; i++)
+                _vuLevels[i] = Math.Max(0, _vuLevels[i] * 0.6);
+            for (var i = 0; i < _vuPeaks.Length; i++)
+                _vuPeaks[i] *= 0.5;
+            PushCurrentVuFrame();
+        }
+    }
+
+    private void OnVuTimerTick(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !vm.IsPlaying)
+        {
+            _vuTimer.Stop();
+            return;
+        }
+
+        for (var i = 0; i < _vuLevels.Length; i++)
+        {
+            // Smooth random walk toward a target level so bars don't strobe.
+            var target = 0.25 + _vuRng.NextDouble() * 0.7;
+            // Lower bars (left) tend to be slightly stronger — mimics typical mix.
+            target *= 0.85 + (1.0 - (double)i / _vuLevels.Length) * 0.25;
+            _vuLevels[i] = _vuLevels[i] + (target - _vuLevels[i]) * (_vuRng.NextDouble() * 0.6 + 0.2);
+
+            // Peak hold: rises instantly, decays slowly.
+            if (_vuLevels[i] > _vuPeaks[i]) _vuPeaks[i] = _vuLevels[i];
+            else _vuPeaks[i] = Math.Max(0, _vuPeaks[i] - 0.02);
+        }
+
+        PushCurrentVuFrame();
+    }
+
+    private void PushCurrentVuFrame()
+    {
+        if (DataContext is MainViewModel vm)
+            vm.PushVuFrame(_vuLevels);
+    }
+
+    private void ResetVuMeter()
+    {
+        for (var i = 0; i < _vuLevels.Length; i++) _vuLevels[i] = 0;
+        for (var i = 0; i < _vuPeaks.Length; i++) _vuPeaks[i] = 0;
+        PushCurrentVuFrame();
+    }
+
+    // ============================================================
+    // Chrome bar — top window controls (PotPlayer-style)
+    // ============================================================
+
+    private void OnChromeAppMenuClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // ContextMenu opens on right-click by default; PotPlayer-style ▼ expects
+        // a left click. Forward to the button's ContextMenu programmatically.
+        if (sender is not Button button || button.ContextMenu is null) return;
+        button.ContextMenu.Open(button);
+    }
+
+    private void OnChromeExitClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => Close();
+
+    private void OnTogglePinClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.IsAlwaysOnTop = !vm.IsAlwaysOnTop;
+        vm.StatusMessage = vm.IsAlwaysOnTop ? "已釘選置頂" : "已取消釘選";
+    }
+
+    private void OnMinimizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => WindowState = WindowState.Minimized;
+
+    private void OnMaximizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void OnCloseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => Close();
 
     private void ShutdownPlayback()
     {

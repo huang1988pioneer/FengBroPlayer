@@ -39,3 +39,6 @@ app.publish/
 *.local.json
 .env
 .env.*
+
+## Agent workspace (session memory / logs — not project source)
+.workbuddy-ai/

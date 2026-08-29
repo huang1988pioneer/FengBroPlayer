@@ -63,6 +63,25 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<RecentPlayEntry> RecentStreamItems => _streams.Items;
     public ObservableCollection<double> WaveformBars { get; } = [];
 
+    /// <summary>VU meter bars (0..1 each) — pushed by a timer in the view; falls back to dim when paused.</summary>
+    public ObservableCollection<double> VuLevels { get; } = new(Enumerable.Repeat(0.0, 32));
+
+    /// <summary>Short format tag for the chrome bar (e.g. "MP3", "MP4", "AUDIO", "VIDEO", "—").</summary>
+    public string FormatTag
+    {
+        get
+        {
+            var item = CurrentMedia;
+            if (item is null) return "—";
+            var fmt = string.IsNullOrWhiteSpace(item.Format) ? "" : item.Format.ToUpperInvariant();
+            return fmt switch
+            {
+                "URL" => item.Kind == MediaKind.Audio ? "AUDIO" : "VIDEO",
+                _ => fmt.Length > 6 ? fmt[..6] : fmt
+            };
+        }
+    }
+
     /// <summary>Bound to LibVLC VideoView for real video rendering (Stage A uses video engine).</summary>
     public MediaPlayer VideoMediaPlayer => _video.Player;
 
@@ -626,7 +645,28 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     partial void OnCurrentMediaChanged(MediaItem? value)
-        => OnPropertyChanged(nameof(PlaylistPositionText));
+    {
+        OnPropertyChanged(nameof(PlaylistPositionText));
+        OnPropertyChanged(nameof(FormatTag));
+    }
+
+    /// <summary>
+    /// Push a fresh VU meter frame from the view's animation timer.
+    /// Values are 0..1; bars outside range are clamped.
+    /// </summary>
+    public void PushVuFrame(IReadOnlyList<double> levels)
+    {
+        var n = Math.Min(levels.Count, VuLevels.Count);
+        for (var i = 0; i < n; i++)
+            VuLevels[i] = Math.Clamp(levels[i], 0, 1);
+    }
+
+    /// <summary>Reset VU meter to dim (e.g. when playback stops or media changes).</summary>
+    public void ResetVuMeter()
+    {
+        for (var i = 0; i < VuLevels.Count; i++)
+            VuLevels[i] = 0;
+    }
 
     private void ClearSubtitleForDifferentVideo(string videoPath)
     {

@@ -3,15 +3,20 @@
 
     <!-- Pro Dark — KM/Pot inspired neutral chrome -->
     <Color x:Key="BgDeepColor">#0A0A0A</Color>
-    <Color x:Key="BgAppColor">#0D0D0D</Color>
-    <Color x:Key="BgSidebarColor">#121212</Color>
-    <Color x:Key="BgPanelColor">#161616</Color>
-    <Color x:Key="BgCardColor">#1A1A1A</Color>
+    <Color x:Key="BgAppColor">#0F0F0F</Color>
+    <Color x:Key="BgSidebarColor">#161616</Color>
+    <Color x:Key="BgPanelColor">#1A1A1A</Color>
+    <Color x:Key="BgCardColor">#1E1E1E</Color>
     <Color x:Key="BgElevatedColor">#222222</Color>
     <Color x:Key="BgHoverColor">#2A2A2A</Color>
     <Color x:Key="BgSelectedColor">#1A2A3A</Color>
     <Color x:Key="BgControlBarColor">#141414</Color>
     <Color x:Key="BgStageColor">#0D0D0D</Color>
+
+    <!-- PotPlayer-inspired chrome bar (slightly lighter than app so it reads as chrome) -->
+    <Color x:Key="ChromeBgColor">#1F1F1F</Color>
+    <Color x:Key="ChromeBgHoverColor">#2C2C2C</Color>
+    <Color x:Key="ChromeSeparatorColor">#333333</Color>
 
     <!-- Accent (locked) -->
     <Color x:Key="AccentColor">#3B9EFF</Color>
@@ -19,6 +24,17 @@
     <Color x:Key="AccentGlowColor">#5CB0FF</Color>
     <Color x:Key="AccentPinkColor">#6EC1FF</Color>
     <Color x:Key="FavoriteColor">#3B9EFF</Color>
+
+    <!-- PotPlayer yellow progress / accent -->
+    <Color x:Key="SeekYellowColor">#FFD040</Color>
+    <Color x:Key="SeekYellowSoftColor">#E8B838</Color>
+    <Color x:Key="SeekYellowTrackColor">#3A3A3A</Color>
+
+    <!-- VU meter — blue/green palette -->
+    <Color x:Key="VuBaseColor">#2D7CB8</Color>
+    <Color x:Key="VuMidColor">#36B5C9</Color>
+    <Color x:Key="VuPeakColor">#3FD962</Color>
+    <Color x:Key="VuDimColor">#1F2A33</Color>
 
     <!-- Text -->
     <Color x:Key="TextPrimaryColor">#F0F0F0</Color>
@@ -50,6 +66,22 @@
     <SolidColorBrush x:Key="TextOnAccentBrush" Color="{StaticResource TextOnAccentColor}" />
     <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
 
+    <!-- Chrome bar brushes -->
+    <SolidColorBrush x:Key="ChromeBgBrush" Color="{StaticResource ChromeBgColor}" />
+    <SolidColorBrush x:Key="ChromeBgHoverBrush" Color="{StaticResource ChromeBgHoverColor}" />
+    <SolidColorBrush x:Key="ChromeSeparatorBrush" Color="{StaticResource ChromeSeparatorColor}" />
+
+    <!-- Yellow seek brushes -->
+    <SolidColorBrush x:Key="SeekYellowBrush" Color="{StaticResource SeekYellowColor}" />
+    <SolidColorBrush x:Key="SeekYellowSoftBrush" Color="{StaticResource SeekYellowSoftColor}" />
+    <SolidColorBrush x:Key="SeekYellowTrackBrush" Color="{StaticResource SeekYellowTrackColor}" />
+
+    <!-- VU meter brushes -->
+    <SolidColorBrush x:Key="VuBaseBrush" Color="{StaticResource VuBaseColor}" />
+    <SolidColorBrush x:Key="VuMidBrush" Color="{StaticResource VuMidColor}" />
+    <SolidColorBrush x:Key="VuPeakBrush" Color="{StaticResource VuPeakColor}" />
+    <SolidColorBrush x:Key="VuDimBrush" Color="{StaticResource VuDimColor}" />
+
     <LinearGradientBrush x:Key="AccentGradient" StartPoint="0%,0%" EndPoint="100%,100%">
         <GradientStop Color="#2B7FD4" Offset="0" />
         <GradientStop Color="#3B9EFF" Offset="1" />
@@ -63,6 +95,13 @@
     <LinearGradientBrush x:Key="ProgressGradient" StartPoint="0%,50%" EndPoint="100%,50%">
         <GradientStop Color="#2B7FD4" Offset="0" />
         <GradientStop Color="#5CB0FF" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- VU meter gradient: green base → blue mid → bright tip (matches PotPlayer style) -->
+    <LinearGradientBrush x:Key="VuMeterGradient" StartPoint="0%,100%" EndPoint="0%,0%">
+        <GradientStop Color="#3FD962" Offset="0" />
+        <GradientStop Color="#36B5C9" Offset="0.55" />
+        <GradientStop Color="#2D7CB8" Offset="1" />
     </LinearGradientBrush>
 
     <CornerRadius x:Key="RadiusSm">4</CornerRadius>

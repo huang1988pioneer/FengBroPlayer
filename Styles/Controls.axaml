@@ -1,6 +1,200 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- =====================================================
+         POTPLAYER-INSPIRED CHROME & TRANSPORT
+         ===================================================== -->
+
+    <!-- Top chrome bar (PotPlayer-style: dropdown + format tag + filename + window buttons) -->
+    <Style Selector="Border.chrome-top">
+        <Setter Property="Background" Value="{StaticResource ChromeBgBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="0,0" />
+        <Setter Property="Height" Value="32" />
+    </Style>
+
+    <!-- App name button (left of chrome) — looks like a tab/handle -->
+    <Style Selector="Button.chrome-app">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="Padding" Value="12,0,14,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.chrome-app:pointerover">
+        <Setter Property="Background" Value="{StaticResource ChromeBgHoverBrush}" />
+    </Style>
+
+    <!-- Format tag chip (MP3 / MP4) -->
+    <Style Selector="Border.format-tag">
+        <Setter Property="Background" Value="{StaticResource BgElevatedBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="Margin" Value="0,6,8,6" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Filename label in chrome -->
+    <Style Selector="TextBlock.chrome-filename">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Margin" Value="4,0,8,0" />
+    </Style>
+
+    <!-- Right-aligned window control buttons -->
+    <Style Selector="Button.chrome-icon">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinWidth" Value="44" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.chrome-icon:pointerover">
+        <Setter Property="Background" Value="{StaticResource ChromeBgHoverBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.chrome-close">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinWidth" Value="44" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.chrome-close:pointerover">
+        <Setter Property="Background" Value="#C42B1C" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- =====================================================
+         INFO BAR — large time + codec info + VU meter
+         ===================================================== -->
+
+    <Style Selector="Border.info-bar">
+        <Setter Property="Background" Value="#0F0F0F" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="MinHeight" Value="44" />
+    </Style>
+
+    <!-- Big time display (PotPlayer style: huge 28px white) -->
+    <Style Selector="TextBlock.big-time">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontFeatures" Value="tnum" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.big-time-small">
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontFeatures" Value="tnum" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.codec-label">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.info-filename">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- VU meter bar — single bar in a vertical stack of bars -->
+    <Style Selector="Border.vu-bar">
+        <Setter Property="Width" Value="3" />
+        <Setter Property="Margin" Value="0,0,1,0" />
+        <Setter Property="CornerRadius" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="Background" Value="{StaticResource VuDimBrush}" />
+    </Style>
+
+    <!-- =====================================================
+         YELLOW SEEK BAR
+         ===================================================== -->
+
+    <Style Selector="Border.seek-bar-container">
+        <Setter Property="Background" Value="#1A1A1A" />
+        <Setter Property="Padding" Value="14,4" />
+        <Setter Property="MinHeight" Value="20" />
+    </Style>
+
+    <!-- =====================================================
+         COMPACT TRANSPORT
+         ===================================================== -->
+
+    <Style Selector="Border.control-bar-compact">
+        <Setter Property="Background" Value="#0F0F0F" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="MinHeight" Value="44" />
+    </Style>
+
+    <!-- Smaller transport button: 26px (PotPlayer compact) -->
+    <Style Selector="Button.transport-compact">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.transport-compact:pointerover">
+        <Setter Property="Background" Value="{StaticResource BgHoverBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- Compact main play button (yellow accent — PotPlayer uses yellow too) -->
+    <Style Selector="Button.play-main-compact">
+        <Setter Property="Background" Value="{StaticResource SeekYellowBrush}" />
+        <Setter Property="Foreground" Value="#1A1A1A" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.play-main-compact:pointerover">
+        <Setter Property="Background" Value="{StaticResource SeekYellowSoftBrush}" />
+    </Style>
+
+    <!-- =====================================================
+         KEEP EXISTING STYLES BELOW (unchanged)
+         ===================================================== -->
+
     <!-- Dense transport (control bar) -->
     <Style Selector="Button.transport">
         <Setter Property="Background" Value="Transparent" />
@@ -191,6 +385,29 @@
         <Setter Property="Minimum" Value="0" />
         <Setter Property="Maximum" Value="1" />
         <Setter Property="Height" Value="18" />
+    </Style>
+
+    <!-- PotPlayer-style yellow seek slider -->
+    <Style Selector="Slider.seek-yellow">
+        <Setter Property="Foreground" Value="{StaticResource SeekYellowBrush}" />
+        <Setter Property="Background" Value="{StaticResource SeekYellowTrackBrush}" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="1" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="MinHeight" Value="14" />
+        <Setter Property="Padding" Value="0,2" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <!-- Volume slider compact -->
+    <Style Selector="Slider.volume-compact">
+        <Setter Property="Foreground" Value="{StaticResource SeekYellowBrush}" />
+        <Setter Property="Background" Value="#2A2A2A" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="1" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Width" Value="80" />
+        <Setter Property="Cursor" Value="Hand" />
     </Style>
 
     <Style Selector="Slider.seek">
