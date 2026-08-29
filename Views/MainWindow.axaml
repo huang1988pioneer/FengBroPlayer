@@ -243,7 +243,8 @@
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource AccentBrush}"
                                        HorizontalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="None"
                                        TextAlignment="Center" />
 
                             <!-- Mini waveform when audio -->

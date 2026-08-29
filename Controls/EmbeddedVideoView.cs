@@ -37,9 +37,20 @@ public sealed class EmbeddedVideoView : NativeControlHost
             (view, e) => view.OnMediaPlayerChanged(e));
     }
 
+    private static readonly System.Reflection.PropertyInfo? IsDisposedProp =
+        typeof(MediaPlayer).GetProperty("IsDisposed",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+    /// <summary>Internal.IsDisposed is protected in LibVLCSharp; probe it reflectively.</summary>
+    private static bool IsNativeDisposed(MediaPlayer player)
+    {
+        try { return IsDisposedProp?.GetValue(player) is true; }
+        catch { return true; }
+    }
+
     private void OnMediaPlayerChanged(AvaloniaPropertyChangedEventArgs e)
     {
-        if (e.OldValue is MediaPlayer oldPlayer)
+        if (e.OldValue is MediaPlayer oldPlayer && !IsNativeDisposed(oldPlayer))
         {
             try { oldPlayer.Hwnd = IntPtr.Zero; }
             catch { /* ignore */ }
@@ -94,7 +105,7 @@ public sealed class EmbeddedVideoView : NativeControlHost
         // Never Stop() here. Stop() on the UI thread during layout is a known
         // LibVLC freeze. Window close stops the player first (MainWindow.Closing)
         // so this path should only see a detached or already-stopped player.
-        if (MediaPlayer is not null)
+        if (MediaPlayer is not null && !IsNativeDisposed(MediaPlayer))
         {
             try
             {
@@ -127,7 +138,8 @@ public sealed class EmbeddedVideoView : NativeControlHost
 
     private void AttachPlayerToHost()
     {
-        if (MediaPlayer is null || _platformHandle is null || _platformHandle.Handle == IntPtr.Zero)
+        if (MediaPlayer is null || IsNativeDisposed(MediaPlayer)
+            || _platformHandle is null || _platformHandle.Handle == IntPtr.Zero)
             return;
 
         try

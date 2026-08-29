@@ -234,15 +234,18 @@ public partial class MainWindow : Window
     private void ShutdownPlayback()
     {
         _fsHideTimer.Stop();
+
+        // Detach the view first: the native player must still be alive when
+        // OnMediaPlayerChanged clears Hwnd, or set_hwnd faults (0xC0000005).
+        try { VideoHost.MediaPlayer = null; }
+        catch { /* ignore */ }
+
         if (DataContext is MainViewModel vm)
         {
             vm.PropertyChanged -= OnViewModelPropertyChanged;
             try { vm.Dispose(); }
             catch { /* native teardown must continue */ }
         }
-
-        try { VideoHost.MediaPlayer = null; }
-        catch { /* player already disposed */ }
     }
 
     private async Task<IReadOnlyList<string>> PickFilesAsync(string kind)
