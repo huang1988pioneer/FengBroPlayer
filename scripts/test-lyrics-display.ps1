@@ -3,11 +3,12 @@ $ErrorActionPreference = 'Stop'
 $xamlPath = Join-Path $PSScriptRoot '..\Views\MainWindow.axaml'
 Add-Type -AssemblyName System.Xml.Linq
 $document = [System.Xml.Linq.XDocument]::Load((Resolve-Path $xamlPath))
-$avaloniaNamespace = [System.Xml.Linq.XNamespace]::Get('https://github.com/avaloniaui')
-$lyricTextBlock = $document.Descendants($avaloniaNamespace + 'TextBlock') |
+$lyricTextBlock = $document.Descendants() |
     Where-Object {
         $textAttribute = $_.Attribute('Text')
-        $null -ne $textAttribute -and $textAttribute.Value -eq '{Binding CurrentLyricText}'
+        $null -ne $textAttribute -and
+            $_.Name.LocalName -eq 'LyricTextBlock' -and
+            $textAttribute.Value -eq '{Binding CurrentLyricText}'
     } |
     Select-Object -First 1
 

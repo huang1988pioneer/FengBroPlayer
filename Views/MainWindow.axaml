@@ -235,17 +235,17 @@
                                        TextTrimming="CharacterEllipsis"
                                        TextAlignment="Center" />
 
-                            <TextBlock Text="{Binding CurrentLyricText}"
-                                       IsVisible="{Binding HasLyrics}"
-                                       MaxWidth="560"
-                                       Margin="0,10,0,0"
-                                       FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource AccentBrush}"
-                                       HorizontalAlignment="Center"
-                                       TextWrapping="Wrap"
-                                       TextTrimming="None"
-                                       TextAlignment="Center" />
+                            <ctrl:LyricTextBlock Text="{Binding CurrentLyricText}"
+                                                 IsVisible="{Binding HasLyrics}"
+                                                 MaxWidth="560"
+                                                 Margin="0,10,0,0"
+                                                 FontSize="18"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 HorizontalAlignment="Center"
+                                                 TextWrapping="Wrap"
+                                                 TextTrimming="None"
+                                                 TextAlignment="Center" />
 
                             <!-- Mini waveform when audio -->
                             <Border Height="36"
