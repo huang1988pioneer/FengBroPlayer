@@ -9,8 +9,9 @@ namespace FengBroPlayer.Controls;
 
 /// <summary>
 /// Displays a lyric line without changing its whitespace unless the available
-/// width actually causes wrapping. When wrapping is needed, the whitespace
-/// immediately before each wrapped segment becomes an explicit line break.
+/// width actually causes wrapping. When wrapping is needed, an explicit line
+/// break is appended after the whitespace immediately before each wrapped
+/// segment.
 /// </summary>
 public sealed class LyricTextBlock : TextBlock
 {
@@ -124,12 +125,12 @@ public sealed class LyricTextBlock : TextBlock
     }
 }
 
-/// <summary>Applies display-only whitespace breaks to measured lyric lines.</summary>
+/// <summary>Applies display-only line breaks to measured lyric lines.</summary>
 public static class LyricTextFormatter
 {
     /// <summary>
-    /// Replaces the breakable whitespace immediately before each wrapped line
-    /// with a newline. All other characters, including whitespace, remain as-is.
+    /// Appends a newline after the breakable whitespace immediately before each
+    /// wrapped line. All characters, including the whitespace, remain as-is.
     /// </summary>
     public static string BreakAtPreviousWhitespace(
         string text,
@@ -152,7 +153,9 @@ public static class LyricTextFormatter
         var result = new StringBuilder(text.Length + breakPositions.Count);
         for (var index = 0; index < text.Length; index++)
         {
-            result.Append(breakPositions.Contains(index) ? '\n' : text[index]);
+            result.Append(text[index]);
+            if (breakPositions.Contains(index))
+                result.Append('\n');
         }
 
         return result.ToString();

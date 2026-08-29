@@ -15,9 +15,9 @@ static void AssertEqual(string expected, string actual, string caseName)
 }
 
 AssertEqual(
-    "一二三\n四五",
+    "一二三 \n四五",
     LyricTextFormatter.BreakAtPreviousWhitespace("一二三 四五", [4]),
-    "wrap at the previous space");
+    "append a newline after the previous space");
 
 AssertEqual(
     "前  後",
@@ -30,7 +30,7 @@ AssertEqual(
     "leave unbreakable text unchanged");
 
 AssertEqual(
-    "一\n二\n三\n四",
+    "一 \n二 \n三 \n四",
     LyricTextFormatter.BreakAtPreviousWhitespace("一 二 三 四", [2, 4, 6]),
     "apply multiple wrapped breaks");
 
@@ -49,13 +49,13 @@ var wrappingControl = new LyricTextBlock
     TextTrimming = Avalonia.Media.TextTrimming.None
 };
 wrappingControl.Measure(new Size(80, double.PositiveInfinity));
-AssertEqual("一二三\n四五", wrappingControl.Text, "format the measured control text");
+AssertEqual("一二三 \n四五", wrappingControl.Text, "format the measured control text");
 
 wrappingControl.Measure(new Size(240, double.PositiveInfinity));
 AssertEqual(source, wrappingControl.Text, "restore whitespace when wrapping is no longer needed");
 
 wrappingControl.Measure(new Size(80, double.PositiveInfinity));
-AssertEqual("一二三\n四五", wrappingControl.Text, "reapply the break after narrowing again");
+AssertEqual("一二三 \n四五", wrappingControl.Text, "reapply the break after narrowing again");
 
 var singleLineControl = new LyricTextBlock
 {
